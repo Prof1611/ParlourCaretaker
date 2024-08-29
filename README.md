@@ -6,29 +6,20 @@ Built for [The Last Dinner Party Discord Server](https://discord.gg/theparlour)
 
 ## Features
 
-- **Send Notices via DM:** Moderators can send predefined notices to members via direct messages.
-- **Ban Members:** Moderators can ban members and auto send a notice to them with the reason.
-- **Logging:** Logs all moderation actions in a specified channel for easy tracking.
-
+*IN PROGRESS*
 ## Usage
 
 ### Commands
 
-- **`>notice @user "title" "message"`**: Sends a written notice to a user via DM. The notice includes a title and message within quotes.
-  
-  Example:
-  
-    ```bash
-    >notice @Wumpus "Notice of Violation" "We have received reports of..."
-    ```
+*IN PROGRESS*
 
 ### Roles
 
-The bot checks if the user has a specific role before allowing them to execute commands. Configure this role in the `.env` file.
+*IN PROGRESS*
 
 ## Logging
 
-All moderation actions, such as sending notices, are logged in a specified channel. This helps keep track of actions taken by moderators.
+*IN PROGRESS*
 
 ## License
 
