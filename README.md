@@ -2,4 +2,4 @@
 
 **PARLOUR CARETAKER**
 
-Built for TLDP (Discord server)[discord.gg/theparlour]
+Built for TLDP [Discord server](discord.gg/theparlour)
