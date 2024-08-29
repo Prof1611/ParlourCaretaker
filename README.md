@@ -1,1 +1,5 @@
 # ParlourCaretaker
+
+**PARLOUR CARETAKER**
+
+Built for TLDP (Discord server)[discord.gg/theparlour]
