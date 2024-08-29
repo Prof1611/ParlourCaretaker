@@ -32,8 +32,6 @@ For any issues or questions, feel free to open an issue in the [GitHub repositor
 ---
 
 ## Maintained by:
-GitHub: **[Prof1611](https://github.com/Prof1611)**
-Discord: Tygafire
+GitHub: **[Prof1611](https://github.com/Prof1611)**<br>Discord: Tygafire
 
-GitHub: **[MichaelEavis](https://github.com/MichaelEavis)**
-Discord: Harry0278
+GitHub: **[MichaelEavis](https://github.com/MichaelEavis)**<br>Discord: Harry0278
