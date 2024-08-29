@@ -42,12 +42,14 @@ For any issues or questions, feel free to open an issue in the [GitHub repositor
 
 ## Maintained by:
 GitHub: **[Prof1611](https://github.com/Prof1611)**
+
 Discord: Tygafire
 
 GitHub: **[HazzaWaltham123](https://github.com/HazzaWaltham123)**
+
 Discord: Harry0278
 
 
-**TO DO**
+##TO DO
 
 - [x] Test
