@@ -44,7 +44,7 @@ Discord: Harry0278
 - [] Build out initial functionality (importing packages, building out initial token functionality and connecting to Discord API)
 - [] Test intial functionality, bot switches on, shows online on Discord and connects to the API
 
-##Completed
+## Completed
 
 *Move anything from to do list to completed with test notes and date completed*
 
