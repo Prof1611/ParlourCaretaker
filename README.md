@@ -35,19 +35,5 @@ For any issues or questions, feel free to open an issue in the [GitHub repositor
 GitHub: **[Prof1611](https://github.com/Prof1611)**
 Discord: Tygafire
 
-GitHub: **[HazzaWaltham123](https://github.com/HazzaWaltham123)**
+GitHub: **[MichaelEavis](https://github.com/MichaelEavis)**
 Discord: Harry0278
-
-
-## TO DO
-
-- [] Build out initial functionality (importing packages, building out initial token functionality and connecting to Discord API)
-- [] Test intial functionality, bot switches on, shows online on Discord and connects to the API
-
-## Completed
-
-*Move anything from to do list to completed with test notes and date completed*
-
-
-
-
