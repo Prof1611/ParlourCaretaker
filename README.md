@@ -39,6 +39,15 @@ GitHub: **[HazzaWaltham123](https://github.com/HazzaWaltham123)**
 Discord: Harry0278
 
 
-##TO DO
+## TO DO
 
-- [x] Test
+- [] Build out initial functionality (importing packages, building out initial token functionality and connecting to Discord API)
+- [] Test intial functionality, bot switches on, shows online on Discord and connects to the API
+
+##Completed
+
+*Move anything from to do list to completed with test notes and date completed*
+
+
+
+
