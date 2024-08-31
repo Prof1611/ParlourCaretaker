@@ -5,7 +5,6 @@ import os
 from os import environ
 import asyncio
 import logging
-import json
 
 
 # Define ANSI escape sequences for colours
