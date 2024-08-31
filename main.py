@@ -5,6 +5,7 @@ import os
 from os import environ
 import asyncio
 import logging
+import json
 
 
 # Define ANSI escape sequences for colours
@@ -41,7 +42,14 @@ if BOT_TOKEN is None:
     print("\033[32m[BOT]\033[0m \033[91m[ERROR]\033[0m Discord bot 'TOKEN' environment variable not found. Please set it!")
     exit(1)
 
-bot = commands.Bot(command_prefix=">", intents=discord.Intents.all())
+intents = discord.Intents.all()
+intents.dm_messages = True
+intents.guilds = True
+intents.members = True
+bot = commands.Bot(command_prefix=">", intents=intents)
+
+dm_forward_channel_id = 1237165394649682003
+guild_id = 1161423690517463161
 
 
 @bot.event
@@ -59,6 +67,43 @@ async def load():
     for filename in os.listdir("./cogs"):
         if filename.endswith(".py"):
             await bot.load_extension(f"cogs.{filename[:-3]}")
+
+
+@bot.event
+# Forwards direct messages to The Parlour
+async def on_message(message):
+    if message.author == bot.user:
+        return
+
+    if isinstance(message.channel, discord.DMChannel):
+        guild = bot.get_guild(guild_id)
+        if guild:
+            target_channel = guild.get_channel(dm_forward_channel_id)
+            if target_channel:
+                try:
+                    # Get the user's avatar as an Asset object
+                    user_avatar = message.author.avatar
+                    if user_avatar:
+                        # Construct the avatar URL dynamically using the user ID and hash
+                        avatar_url = f"https://cdn.discordapp.com/avatars/{message.author.id}/{user_avatar.url}"
+                        embedded_msg = discord.Embed(
+                            title=f"Direct Message from '{message.author}'", description=f"{message.content}", color=discord.Color.green())
+                        embedded_msg.set_thumbnail(url=avatar_url)
+                        await target_channel.send(embed=embedded_msg)
+                    else:
+                        embedded_msg = discord.Embed(
+                            title=f"Direct Message from '{message.author}'", description=f"{message.content}", color=discord.Color.green())
+                        await target_channel.send(embed=embedded_msg)
+                    logging.info(
+                        f"Direct Message from \033[35m{message.author}\033[0m successfully forwarded to \033[35m#{target_channel.name}\033[0m")
+                except discord.HTTPException as e:
+                    logging.error(f"Error forwarding direct Message: {e}")
+            else:
+                logging.error(
+                    "Target channel not found in the specified guild when attempting to forward Direct Message.")
+        else:
+            logging.error(
+                "Guild not found when attempting to forward Direct Message.")
 
 
 async def main():
