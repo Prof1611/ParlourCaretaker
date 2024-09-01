@@ -5,21 +5,20 @@ The Parlour Caretaker is a custom Discord bot designed to assist with moderation
 Built for [The Last Dinner Party Discord Server](https://discord.gg/theparlour)
 
 ## Features
+- Custom moderation and utility commands
+- Auto logging for disciplinary actions
+- Direct message forwarding
 
-*IN PROGRESS*
 ## Usage
 
 ### Commands
 
-*IN PROGRESS*
+- `/ban [user] [reason]` Permanently bans a member and sends them a notice with the reason via DM.
+- `/kick [user] [reason]` Kicks a member and sends them a notice with the reason via DM.
 
-### Roles
+### Logging
 
-*IN PROGRESS*
-
-## Logging
-
-*IN PROGRESS*
+All moderation actions, such as sending notices, are logged in a specified channel. This helps keep track of actions taken by moderators.
 
 ## License
 
