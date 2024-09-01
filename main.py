@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 import discord.utils
 import os
-from os import environ
 import asyncio
 import logging
 
@@ -37,14 +36,17 @@ logging.basicConfig(level=logging.INFO, handlers=[handler])
 
 BOT_TOKEN = os.environ.get("TOKEN", None)  # Set a default value if not found
 
-if BOT_TOKEN is None:
-    print("\033[32m[BOT]\033[0m \033[91m[ERROR]\033[0m Discord bot 'TOKEN' environment variable not found. Please set it!")
+if BOT_TOKEN is None:  # Check if bot token is set correctly from environment variable
+    logging.error(
+        "Bot token environment variable not found when searching with name 'TOKEN'. Please set it!")
     exit(1)
 
-intents = discord.Intents.all()
+intents = discord.Intents.all()  # Set bot intents
 intents.dm_messages = True
 intents.guilds = True
 intents.members = True
+
+# Initialize the bot with a custom prefix
 bot = commands.Bot(command_prefix=">", intents=intents)
 
 dm_forward_channel_id = 1237165394649682003
@@ -55,14 +57,14 @@ guild_id = 1161423690517463161
 async def on_ready():
     logging.info(f"Sucessfully logged in as \033[35m{bot.user}\033[0m")
     try:
-        synced_commands = await bot.tree.sync()
+        synced_commands = await bot.tree.sync()  # Sync all bot commands
         logging.info(f"Successfully synced {len (synced_commands)} commands.")
     except Exception as e:
         logging.error(
             f"An error with syncing application commands has occured: {e}")
 
 
-async def load():
+async def load():  # Load command cogs from 'cogs' folder
     for filename in os.listdir("./cogs"):
         if filename.endswith(".py"):
             await bot.load_extension(f"cogs.{filename[:-3]}")
@@ -71,28 +73,20 @@ async def load():
 @bot.event
 # Forwards direct messages to The Parlour
 async def on_message(message):
-    if message.author == bot.user:
+    if message.author == bot.user:  # Ignore messages from the bot itself to prevent loops
         return
 
     if isinstance(message.channel, discord.DMChannel):
         guild = bot.get_guild(guild_id)
         if guild:
-            target_channel = guild.get_channel(dm_forward_channel_id)
+            target_channel = guild.get_channel(
+                dm_forward_channel_id)  # Get specified channel from ID
             if target_channel:
                 try:
-                    # Get the user's avatar as an Asset object
-                    user_avatar = message.author.avatar
-                    if user_avatar:
-                        # Construct the avatar URL dynamically using the user ID and hash
-                        avatar_url = f"https://cdn.discordapp.com/avatars/{message.author.id}/{user_avatar.url}"
-                        embedded_msg = discord.Embed(
-                            title=f"Direct Message from '{message.author}'", description=f"{message.content}", color=discord.Color.green())
-                        embedded_msg.set_thumbnail(url=avatar_url)
-                        await target_channel.send(embed=embedded_msg)
-                    else:
-                        embedded_msg = discord.Embed(
-                            title=f"Direct Message from '{message.author}'", description=f"{message.content}", color=discord.Color.green())
-                        await target_channel.send(embed=embedded_msg)
+                    embedded_msg = discord.Embed(
+                        title=f"Direct Message from '{message.author}'", description=f"{message.content}", color=discord.Color.green())  # Set embed content
+                    # Forward the DM to the specified channel
+                    await target_channel.send(embed=embedded_msg)
                     logging.info(
                         f"Direct Message from \033[35m{message.author}\033[0m successfully forwarded to \033[35m#{target_channel.name}\033[0m")
                 except discord.HTTPException as e:
@@ -105,7 +99,7 @@ async def on_message(message):
                 "Guild not found when attempting to forward Direct Message.")
 
 
-async def main():
+async def main():  # Start bot
     async with bot:
         await load()
         await bot.start(BOT_TOKEN)
