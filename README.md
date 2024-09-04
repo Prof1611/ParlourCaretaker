@@ -13,12 +13,13 @@ Built for [The Last Dinner Party Discord Server](https://discord.gg/theparlour)
 
 ### Commands
 
-- `/ban [user] [reason]` Permanently bans a member and sends them a notice with the reason via DM.
-- `/kick [user] [reason]` Kicks a member and sends them a notice with the reason via DM.
+- `/ban [user] [reason]` Permanently bans a user and sends them a notice with the reason via DM.
+- `/kick [user] [reason]` Kicks a user and sends them a notice with the reason via DM.
+- `/dm [user] [message]` Sends a user a custom message via DM.
 
 ### Logging
 
-All moderation actions, such as sending notices, are logged in a specified channel. This helps keep track of actions taken by moderators.
+All moderation actions are automatically logged in a specified channel. This helps keep track of actions taken by moderators.
 
 ## License
 
