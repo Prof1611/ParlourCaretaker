@@ -5,9 +5,6 @@ import os
 import yaml
 import asyncio
 import logging
-from keep_alive import keep_alive
-
-keep_alive()  # Start the web server before the bot
 
 
 # Define ANSI escape sequences for colours
