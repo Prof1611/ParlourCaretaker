@@ -28,7 +28,7 @@ class Dm(commands.Cog):
 
         except discord.HTTPException as e:
             logging.error(
-                f"Error when attempting to send direct message: {e}")
+                f"Error when attempting to send direct message to '{member.name}'. Error: {e}")
             # Handle cases where the direct message cannot be sent e.g. DM disabled
             embed = discord.Embed(
                 title="Error", description=f"Failed to send custom message to {member.mention} via DM.", color=discord.Color.red())

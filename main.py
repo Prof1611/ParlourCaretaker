@@ -2,8 +2,12 @@ import discord
 from discord.ext import commands
 import discord.utils
 import os
+import yaml
 import asyncio
 import logging
+from keep_alive import keep_alive
+
+keep_alive()  # Start the web server before the bot
 
 
 # Define ANSI escape sequences for colours
@@ -34,6 +38,11 @@ handler.setFormatter(formatter)
 logging.basicConfig(level=logging.INFO, handlers=[handler])
 
 
+# Load the configuration file
+with open('config.yaml', 'r') as config_file:
+    config = yaml.safe_load(config_file)
+
+
 BOT_TOKEN = os.environ.get("TOKEN", None)  # Set a default value if not found
 
 if BOT_TOKEN is None:  # Check if bot token is set correctly from environment variable
@@ -42,6 +51,7 @@ if BOT_TOKEN is None:  # Check if bot token is set correctly from environment va
     exit(1)
 
 intents = discord.Intents.all()  # Set bot intents
+intents.messages = True
 intents.dm_messages = True
 intents.guilds = True
 intents.members = True
@@ -49,8 +59,8 @@ intents.members = True
 # Initialize the bot with a custom prefix
 bot = commands.Bot(command_prefix=">", intents=intents)
 
-dm_forward_channel_id = 1237165394649682003
-guild_id = 1161423690517463161
+dm_forward_channel_id = config["dm_forward_channel_id"]
+guild_id = config["guild_id"]
 
 
 @bot.event

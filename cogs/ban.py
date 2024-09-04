@@ -1,13 +1,18 @@
 import discord
 import logging
+import yaml
+import datetime
 from discord import app_commands
 from discord.ext import commands
-import datetime
 
 
 class Ban(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
+        # Load the configuration file when the instance is created
+        with open('config.yaml', 'r') as config_file:
+            self.config = yaml.safe_load(config_file)
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -20,20 +25,15 @@ class Ban(commands.Cog):
 
         # Send the notice to the member via DM
         try:
-            if member == 411589337369804801:
-                logging.error("Owner (tygafire) entered as victim.")
-                embed = discord.Embed(
-                    title="Error", description="Nice try, fool.", color=discord.Color.red())
-                await interaction.followup.send(embed=embed, ephemeral=True)
-                return
-            elif member == 398205938265358339:
-                logging.error("Owner (harry0278) entered as victim.")
+            if member.id in self.config["owner_ids"]:
+                logging.error("Owner entered as victim.")
                 embed = discord.Embed(
                     title="Error", description="Nice try, fool.", color=discord.Color.red())
                 await interaction.followup.send(embed=embed, ephemeral=True)
                 return
             else:
-                await member.send(f"""**NOTICE: Permanent Ban from The Parlour Discord Server**
+                try:
+                    await member.send(f"""**NOTICE: Permanent Ban from The Parlour Discord Server**
 
 Dear {member.mention},
 
@@ -43,23 +43,53 @@ We are writing to inform you that you have been permanently banned from The Parl
 
 We take upholding the standards of our community very seriously, and continued disruptive or disrespectful behaviour will not be tolerated. This ban ensures a positive and respectful environment for all members.
 
-**Appeal Process:** If you believe this ban was issued in error, you may appeal it by filling out this form https://forms.gle/n9RirTLaQYfuHG5k8
+**Appeal Process:** If you wish to appeal this ban, you may do so by filling out the following form: https://forms.gle/n9RirTLaQYfuHG5k8
 
 Sincerely,
 The Parlour Moderation Team
+*Please do not reply to this message as the staff team will not see it.*
 """)
+                    logging.info(
+                        f"Successfully sent permanent ban notice to '{member.name}' via DM.")
+                except discord.HTTPException as e:
+                    if e.status == 403:  # DMs Disabled
+                        logging.error(
+                            f"DMs disabled when attempting to send ban notice via DM. Error: {e}")
+                        embed = discord.Embed(
+                            title="Error", description=f"That user has their DMs disabled. Failed to send notice.", color=discord.Color.red())
+                        await interaction.followup.send(embed=embed)
+                    else:
+                        logging.error(
+                            f"Error when attempting to send ban notice via DM: {e}")
+                        embed = discord.Embed(
+                            title="Error", description=f"Failed to send notice to {member.mention} via DM.", color=discord.Color.red())
+                        await interaction.followup.send(embed=embed)
+                try:
+                    # Try ban the user from the server
+                    # await member.ban(reason=reason)
+                    guild = interaction.guild
+                    logging.info(
+                        f"Permanently banned '{member.name}'from {guild.name}.")
 
-                # Ban the user from the server
-                await member.ban(reason=reason)
-                logging.info(
-                    f"Banned '{member.name}' and sent notice via DM.")
+                    embed = discord.Embed(
+                        title="Member Banned", description=f"Permanently banned {member.mention} from the server and sent them a notice to via DM.", color=discord.Color.green())
+                    await interaction.followup.send(embed=embed)
+                except discord.HTTPException as e:
+                    if e.status == 403:  # Bot has no permission to ban
+                        logging.error(
+                            f"No permission to ban. Error: {e}")
+                        embed = discord.Embed(
+                            title="Error", description=f"I don't have permission to ban members!", color=discord.Color.red())
+                        await interaction.followup.send(embed=embed)
+                    else:
+                        logging.error(
+                            f"Error when attempting to ban {member.name}. Error: {e}")
+                        embed = discord.Embed(
+                            title="Error", description=f"Failed to ban {member.mention}.", color=discord.Color.red())
+                        await interaction.followup.send(embed=embed)
 
-                embed = discord.Embed(
-                    title="Member Banned", description=f"Sent permanent ban notice to {member.mention} via DM and banned them from the server.", color=discord.Color.green())
-                await interaction.followup.send(embed=embed, ephemeral=True)
                 # Get the target channel object using its ID
-                logs_channel_id = 1237165394649682003
-                guild = interaction.guild
+                logs_channel_id = self.config["logs_channel_id"]
                 logs_channel = guild.get_channel(logs_channel_id)
                 log_link = "https://discord.com/channels/" + \
                     str(interaction.guild.id) + "/" + str(logs_channel_id)
@@ -75,24 +105,47 @@ The Parlour Moderation Team
 **Date of Discipline:** {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 **Moderators Involved:** {interaction.user.mention}""")
                         logging.info(
-                            f"Permanent ban logged in #{logs_channel.name}")
+                            f"Permanent ban logged in #{logs_channel.name}.")
                         embed = discord.Embed(
                             title="Action Logged", description=f"Permanent ban successfully logged in {log_link}.", color=discord.Color.green())
                         await interaction.followup.send(embed=embed, ephemeral=True)
-                    except Exception as e:
-                        logging.error(
-                            f"Failed to log ban: {e}")
-                        embed = discord.Embed(
-                            title="Error", description=f"Failed to log action in {log_link}.", color=discord.Color.red())
-                        await interaction.followup.send(embed=embed, ephemeral=True)
-
+                    except discord.HTTPException as e:
+                        if e.status == 403:  # No access to channel
+                            logging.error(
+                                f"No access to #{logs_channel.name}. Error: {e}")
+                            embed = discord.Embed(
+                                title="Error", description=f"I don't have access to {log_link}!", color=discord.Color.red())
+                            await interaction.followup.send(embed=embed)
+                        elif e.status == 404:  # Channel not found
+                            logging.error(
+                                f"Channel not found. Error: {e}")
+                            embed = discord.Embed(
+                                title="Error", description=f"Channel not found!", color=discord.Color.red())
+                            await interaction.followup.send(embed=embed)
+                        elif e.status == 429:  # Rate limit hit
+                            logging.error(
+                                f"RATE LIMIT. Error: {e}")
+                            embed = discord.Embed(
+                                title="Error", description=f"Too many requests! Please try later.", color=discord.Color.red())
+                            await interaction.followup.send(embed=embed)
+                        elif e.status == 500 or 502 or 503 or 504:  # Discord API error
+                            logging.error(
+                                f"Discord API Error. Error: {e}")
+                            embed = discord.Embed(
+                                title="Error", description=f"Failed to log action in {log_link}. Please try later.", color=discord.Color.red())
+                            await interaction.followup.send(embed=embed)
+                        else:  # Other errors
+                            logging.error(
+                                f"Failed to log ban in {log_link}. Error: {e}")
+                            embed = discord.Embed(
+                                title="Error", description=f"Failed to log action in {log_link}.", color=discord.Color.red())
+                            await interaction.followup.send(embed=embed)
         except discord.HTTPException as e:
             logging.error(
                 f"Error when attempting to ban: {e}")
-            # Handle cases where the message cannot be sent (e.g., DM disabled) or ban fails
             embed = discord.Embed(
                 title="Error", description=f"Failed to send notice or ban {member.mention}. Error: {e}", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=embed)
 
 
 async def setup(bot):
