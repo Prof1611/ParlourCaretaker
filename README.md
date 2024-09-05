@@ -15,8 +15,9 @@ Built for [The Last Dinner Party Discord Server](https://discord.gg/theparlour)
 
 - `/ban [user] [reason]` Permanently bans a user and sends them a notice with the reason via DM.
 - `/kick [user] [reason]` Kicks a user and sends them a notice with the reason via DM.
-- `/dm [user] [message]` Sends a user a custom message via DM.
+- `/dm [user] [message]` Sends a specified user a custom message via DM.
 - `/message [channel] [message]` Sends a custom message to the specified channel.
+- `/help` Sends a list of all commands.
 
 ### Logging
 
