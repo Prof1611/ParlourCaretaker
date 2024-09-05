@@ -12,7 +12,7 @@ class Dm(commands.Cog):
     async def on_ready(self):
         logging.info(f"\033[35m{__name__}\033[0m synced successfully.")
 
-    @app_commands.command(name="dm", description="Sends a user a custom message via DM.")
+    @app_commands.command(name="dm", description="Sends a specified user a custom message via DM.")
     async def dm(self, interaction: discord.Interaction, member: discord.Member, *, message: str):
         # Defer the response to avoid timeout errors
         await interaction.response.defer()
