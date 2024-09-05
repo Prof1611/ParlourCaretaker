@@ -69,7 +69,7 @@ The Parlour Moderation Team
                     await member.ban(reason=reason)
                     guild = interaction.guild
                     logging.info(
-                        f"Permanently banned '{member.name}'from {guild.name}.")
+                        f"Permanently banned '{member.name}' from '{guild.name}'.")
 
                     embed = discord.Embed(
                         title="Member Banned", description=f"Permanently banned {member.mention} from the server and sent them a notice to via DM.", color=discord.Color.green())
@@ -79,11 +79,11 @@ The Parlour Moderation Team
                         logging.error(
                             f"No permission to ban. Error: {e}")
                         embed = discord.Embed(
-                            title="Error", description=f"I don't have permission to ban members!", color=discord.Color.red())
+                            title="No Permission", description=f"I don't have permission to ban members!", color=discord.Color.red())
                         await interaction.followup.send(embed=embed)
                     else:
                         logging.error(
-                            f"Error when attempting to ban {member.name}. Error: {e}")
+                            f"Error when attempting to ban '{member.name}'. Error: {e}")
                         embed = discord.Embed(
                             title="Error", description=f"Failed to ban {member.mention}.", color=discord.Color.red())
                         await interaction.followup.send(embed=embed)
@@ -105,16 +105,16 @@ The Parlour Moderation Team
 **Date of Discipline:** {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 **Moderators Involved:** {interaction.user.mention}""")
                         logging.info(
-                            f"Permanent ban logged in #{logs_channel.name}.")
+                            f"Permanent ban logged in '#{logs_channel.name}'.")
                         embed = discord.Embed(
                             title="Action Logged", description=f"Permanent ban successfully logged in {log_link}.", color=discord.Color.green())
                         await interaction.followup.send(embed=embed, ephemeral=True)
                     except discord.HTTPException as e:
                         if e.status == 403:  # No access to channel
                             logging.error(
-                                f"No access to #{logs_channel.name}. Error: {e}")
+                                f"No access to '#{logs_channel.name}'. Error: {e}")
                             embed = discord.Embed(
-                                title="Error", description=f"I don't have access to {log_link}!", color=discord.Color.red())
+                                title="No Access", description=f"I don't have access to {log_link}!", color=discord.Color.red())
                             await interaction.followup.send(embed=embed)
                         elif e.status == 404:  # Channel not found
                             logging.error(
@@ -136,7 +136,7 @@ The Parlour Moderation Team
                             await interaction.followup.send(embed=embed)
                         else:  # Other errors
                             logging.error(
-                                f"Failed to log ban in {log_link}. Error: {e}")
+                                f"Failed to log ban in '#{logs_channel.name}'. Error: {e}")
                             embed = discord.Embed(
                                 title="Error", description=f"Failed to log action in {log_link}.", color=discord.Color.red())
                             await interaction.followup.send(embed=embed)
@@ -144,7 +144,7 @@ The Parlour Moderation Team
             logging.error(
                 f"Error when attempting to ban: {e}")
             embed = discord.Embed(
-                title="Error", description=f"Failed to send notice or ban {member.mention}. Error: {e}", color=discord.Color.red())
+                title="Error", description=f"Failed to ban and send notice to {member.mention}. Error: {e}", color=discord.Color.red())
             await interaction.followup.send(embed=embed)
 
 

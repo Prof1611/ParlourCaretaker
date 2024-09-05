@@ -67,7 +67,7 @@ The Parlour Moderation Team
                     await member.kick(reason=reason)
                     guild = interaction.guild
                     logging.info(
-                        f"Kicked '{member.name}'from {guild.name}.")
+                        f"Kicked '{member.name}' from '{guild.name}'.")
 
                     embed = discord.Embed(
                         title="Member Kicked", description=f"Kicked {member.mention} from the server and sent them a notice to via DM.", color=discord.Color.green())
@@ -81,7 +81,7 @@ The Parlour Moderation Team
                         await interaction.followup.send(embed=embed)
                     else:
                         logging.error(
-                            f"Error when attempting to kick {member.name} from {guild.name}. Error: {e}")
+                            f"Error when attempting to kick '{member.name}' from '{guild.name}'. Error: {e}")
                         embed = discord.Embed(
                             title="Error", description=f"Failed to kick {member.mention}.", color=discord.Color.red())
                         await interaction.followup.send(embed=embed)
@@ -103,14 +103,14 @@ The Parlour Moderation Team
 **Date of Discipline:** {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 **Moderators Involved:** {interaction.user.mention}""")
                         logging.info(
-                            f"Kick logged in #{logs_channel.name}.")
+                            f"Kick logged in '#{logs_channel.name}'.")
                         embed = discord.Embed(
                             title="Action Logged", description=f"Kick successfully logged in {log_link}.", color=discord.Color.green())
                         await interaction.followup.send(embed=embed, ephemeral=True)
                     except discord.HTTPException as e:
                         if e.status == 403:  # No access to channel
                             logging.error(
-                                f"No access to #{logs_channel.name}. Error: {e}")
+                                f"No access to '#{logs_channel.name}'. Error: {e}")
                             embed = discord.Embed(
                                 title="Error", description=f"I don't have access to {log_link}!", color=discord.Color.red())
                             await interaction.followup.send(embed=embed)
@@ -134,7 +134,7 @@ The Parlour Moderation Team
                             await interaction.followup.send(embed=embed)
                         else:  # Other errors
                             logging.error(
-                                f"Failed to log kick in {log_link}. Error: {e}")
+                                f"Failed to log kick in '#{logs_channel.name}'. Error: {e}")
                             embed = discord.Embed(
                                 title="Error", description=f"Failed to log action in {log_link}.", color=discord.Color.red())
                             await interaction.followup.send(embed=embed)
