@@ -64,7 +64,7 @@ The Parlour Moderation Team
                         await interaction.followup.send(embed=embed)
                 try:
                     # Try kick the user from the server
-                    # await member.kick(reason=reason)
+                    await member.kick(reason=reason)
                     guild = interaction.guild
                     logging.info(
                         f"Kicked '{member.name}'from {guild.name}.")

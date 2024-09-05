@@ -66,7 +66,7 @@ The Parlour Moderation Team
                         await interaction.followup.send(embed=embed)
                 try:
                     # Try ban the user from the server
-                    # await member.ban(reason=reason)
+                    await member.ban(reason=reason)
                     guild = interaction.guild
                     logging.info(
                         f"Permanently banned '{member.name}'from {guild.name}.")
