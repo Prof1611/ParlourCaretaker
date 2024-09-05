@@ -5,4 +5,4 @@ owner_ids: # User IDs of the bot owners
   - 398205938265358339
 guild_id: 1161423690517463161 # Guild ID where the bot operates
 dm_forward_channel_id: 1161423690517463164 # Channel ID for forwarding DMs
-games_channel_id: 1281260171754082430 # Channel ID for sending games night annoucements
+games_channel_id: 1281260171754082430 # Channel ID for sending games night announcements
