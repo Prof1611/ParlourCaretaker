@@ -30,7 +30,7 @@ This project is licensed under the GPL-3.0 License - see the [LICENSE](LICENSE) 
 
 ## Support
 
-For any issues or questions, feel free to open an issue in the [GitHub repository](https://github.com/Prof1611/ParlourCaretaker/issues).
+For any bugs or feature requests, feel free to open an issue in the [Issues](https://github.com/Prof1611/ParlourCaretaker/issues) tab.
 
 ---
 
