@@ -1,8 +1,8 @@
-# The Parlour Caretaker Configuration - Test Server
-logs_channel_id: 1237165394649682003 # Channel ID where moderation actions are logged
+# The Parlour Caretaker Configuration - The Parlour
+logs_channel_id: 1220451817146683423 # Channel ID where moderation actions are logged
 owner_ids: # User IDs of the bot owners
   - 411589337369804801
   - 398205938265358339
-guild_id: 1161423690517463161 # Guild ID where the bot operates
-dm_forward_channel_id: 1161423690517463164 # Channel ID for forwarding DMs
-games_channel_id: 1281260171754082430 # Channel ID for sending games night annoucements
+guild_id: 1151481698786213960 # Guild ID where the bot operates
+dm_forward_channel_id: 1239669255012614267 # Channel ID for forwarding DMs
+games_channel_id: 1159782202985426964 # Channel ID for sending games night announcements
