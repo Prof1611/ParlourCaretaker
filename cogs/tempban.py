@@ -107,6 +107,8 @@ We take upholding the standards of our community very seriously, and continued d
 
 Upon the expiration of your ban, you are welcome to re-join the server. We encourage you to take this time to reflect on your behaviour and consider how you can contribute positively to our community moving forward.
 
+**Appeal Process:** If you wish to appeal this ban, you may do so by filling out the following form: https://forms.gle/Sn73Tvn7VJP2eiTD6
+
 Sincerely,
 The Parlour Moderation Team
 *Please do not reply to this message as the staff team will not see it.*

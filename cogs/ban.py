@@ -43,7 +43,7 @@ We are writing to inform you that you have been permanently banned from The Parl
 
 We take upholding the standards of our community very seriously, and continued disruptive or disrespectful behaviour will not be tolerated. This ban ensures a positive and respectful environment for all members.
 
-**Appeal Process:** If you wish to appeal this ban, you may do so by filling out the following form: https://forms.gle/n9RirTLaQYfuHG5k8
+**Appeal Process:** If you wish to appeal this ban, you may do so by filling out the following form: https://forms.gle/Sn73Tvn7VJP2eiTD6
 
 Sincerely,
 The Parlour Moderation Team
