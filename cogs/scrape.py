@@ -25,7 +25,7 @@ class Scrape(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info(f"{__name__} synced successfully.")
+        logging.info(f"\033[35m{__name__}\033[0m synced successfully.")
 
     @discord.app_commands.command(name="scrape", description="Checks the band's website for new shows and updates #gig-chats.")
     async def scrape(self, interaction: discord.Interaction):
