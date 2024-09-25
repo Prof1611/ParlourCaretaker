@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands, tasks
-from itertools import cycle
+import random
 import discord.utils
 import os
 import yaml
@@ -58,7 +58,7 @@ intents.members = True
 bot = commands.Bot(command_prefix=">", intents=intents)
 
 # Load statuses from the config file
-bot_statuses = cycle(config['statuses'])
+bot_statuses = random.choice(config['statuses'])
 
 dm_forward_channel_id = config["dm_forward_channel_id"]
 guild_id = config["guild_id"]
@@ -66,10 +66,11 @@ guild_id = config["guild_id"]
 
 @tasks.loop(seconds=120)
 async def change_bot_status():
-    next_status = next(bot_statuses)  # Get the next status in the cycle
+    # Get a random status from the list
+    next_status = random.choice(config['statuses'])
     activity = discord.Activity(
         type=discord.ActivityType.listening,  # Set activity type to listening
-        name=next_status  # Set the name to the next status
+        name=next_status  # Set the name to the selected status
     )
     # Change the bot's presence
     await bot.change_presence(status=discord.Status.online, activity=activity)
