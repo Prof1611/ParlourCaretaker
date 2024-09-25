@@ -1,4 +1,4 @@
-# The Parlour Caretaker Configuration - Test Server
+# The Parlour Caretaker Configuration - The Parlour Dev Server
 logs_channel_id: 1237165394649682003 # Channel ID where moderation actions are logged
 owner_ids: # User IDs of the bot owners
   - 411589337369804801

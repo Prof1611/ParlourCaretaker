@@ -1,5 +1,6 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
+from itertools import cycle
 import discord.utils
 import os
 import yaml
@@ -35,8 +36,8 @@ handler.setFormatter(formatter)
 logging.basicConfig(level=logging.INFO, handlers=[handler])
 
 
-# Load the configuration file
-with open('config.yaml', 'r') as config_file:
+# Load the config file with UTF-8 encoding to handle special characters like emojis
+with open("config.yaml", 'r', encoding='utf-8') as config_file:
     config = yaml.safe_load(config_file)
 
 
@@ -56,13 +57,29 @@ intents.members = True
 # Initialize the bot with a custom prefix
 bot = commands.Bot(command_prefix=">", intents=intents)
 
+# Load statuses from the config file
+bot_statuses = cycle(config['statuses'])
+
 dm_forward_channel_id = config["dm_forward_channel_id"]
 guild_id = config["guild_id"]
 
 
-@bot.event
+@tasks.loop(seconds=30)
+async def change_bot_status():
+    next_status = next(bot_statuses)  # Get the next status in the cycle
+    activity = discord.CustomActivity(
+        name=next_status)  # Set as CustomActivity
+    # Change the bot's presence
+    await bot.change_presence(status=discord.Status.online, activity=activity)
+
+
+@ bot.event
 async def on_ready():
     logging.info(f"Sucessfully logged in as \033[35m{bot.user}\033[0m")
+    # readyActivity = discord.CustomActivity(name="Ready!")  # Set as CustomActivity
+    # await bot.change_presence(status=discord.Status.idle, activity=readyActivity)
+    # await asyncio.sleep(5)
+    change_bot_status.start()
     try:
         synced_commands = await bot.tree.sync()  # Sync all bot commands
         logging.info(f"Successfully synced {len (synced_commands)} commands.")
@@ -77,7 +94,7 @@ async def load():  # Load command cogs from 'cogs' folder
             await bot.load_extension(f"cogs.{filename[:-3]}")
 
 
-@bot.event
+@ bot.event
 # Forwards direct messages to The Parlour
 async def on_message(message):
     if message.author == bot.user:  # Ignore messages from the bot itself to prevent loops

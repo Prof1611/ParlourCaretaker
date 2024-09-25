@@ -10,8 +10,8 @@ class Kick(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-        # Load the configuration file when the instance is created
-        with open('config.yaml', 'r') as config_file:
+        # Load the config file with UTF-8 encoding to handle special characters like emojis
+        with open("config.yaml", 'r', encoding='utf-8') as config_file:
             self.config = yaml.safe_load(config_file)
 
     @commands.Cog.listener()
