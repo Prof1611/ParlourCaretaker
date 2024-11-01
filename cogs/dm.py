@@ -14,6 +14,16 @@ class Dm(commands.Cog):
 
     @app_commands.command(name="dm", description="Sends a specified user a custom message via DM.")
     async def dm(self, interaction: discord.Interaction, member: discord.Member, *, message: str):
+        # Check if the bot is trying to send a message to itself
+        if member == self.bot.user:
+            embed = discord.Embed(
+                title="Error",
+                description="The bot cannot send a direct message to itself.",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
         # Defer the response to avoid timeout errors
         await interaction.response.defer()
 
