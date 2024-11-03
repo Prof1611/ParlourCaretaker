@@ -172,7 +172,7 @@ class Scrape(commands.Cog):
         await interaction.followup.send(embed=embed)
 
     async def thread_exists(self, channel, title):
-        return discord.utils.get(channel.threads, name=title) is not None
+        return any(title in thread.name for thread in channel.threads)
 
 
 async def setup(bot):
