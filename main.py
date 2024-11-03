@@ -82,7 +82,11 @@ async def on_ready():
     # readyActivity = discord.CustomActivity(name="Ready!")  # Set as CustomActivity
     # await bot.change_presence(status=discord.Status.idle, activity=readyActivity)
     # await asyncio.sleep(5)
-    change_bot_status.start()
+
+    # Start the task only if it's not already running
+    if not change_bot_status.is_running():
+        change_bot_status.start()
+        
     try:
         synced_commands = await bot.tree.sync()  # Sync all bot commands
         logging.info(f"Successfully synced {len (synced_commands)} commands.")
