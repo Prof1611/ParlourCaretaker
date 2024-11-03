@@ -9,9 +9,9 @@ from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 import csv
 import os
-import sys
 import asyncio
 from datetime import datetime
+import re  # Import the regex module
 
 
 class Scrape(commands.Cog):
@@ -79,7 +79,8 @@ class Scrape(commands.Cog):
                     entry = (date.strip().lower(),
                              venue.strip().lower(), location.strip().lower())
                     if entry not in existing_entries:
-                        csv_writer.writerow([date, venue, location])
+                        # Add unprocessed status for new entries
+                        csv_writer.writerow([date, venue, location, "False"])
                         new_entries.append((date, venue, location))
                         logging.info(f"New entry added: {entry}")
 
@@ -97,8 +98,10 @@ class Scrape(commands.Cog):
                 csv_reader = csv.reader(read_csv_file)
                 next(csv_reader)  # Skip header
                 for row in csv_reader:
+                    # Normalize and store each entry, regardless of its processed state
+                    # Skip the 'processed' column
                     normalised_row = tuple(item.strip().lower()
-                                           for item in row)
+                                           for item in row[:-1])
                     existing_entries.add(normalised_row)
         return existing_entries
 
@@ -113,6 +116,38 @@ class Scrape(commands.Cog):
         else:
             return datetime.strptime(date_str, '%b %d, %Y').strftime('%d %B %Y')
 
+    def mark_event_as_processed(self, entry):
+        # Load all entries
+        entries = []
+        with open(self.output_csv_path, 'r', encoding='utf-8') as csv_file:
+            csv_reader = csv.reader(csv_file)
+            header = next(csv_reader)
+            entries.append(header)  # Keep header
+
+            # Mark matching entry as processed
+            for row in csv_reader:
+                # Assuming date, venue, location are the first three columns
+                if tuple(item.strip().lower() for item in row[:3]) == entry:
+                    row[-1] = "True"  # Set processed to True
+                entries.append(row)
+
+        # Write updated data back to CSV
+        with open(self.output_csv_path, 'w', newline='\n', encoding='utf-8') as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerows(entries)
+
+    def is_unprocessed(self, entry):
+        # Load all entries to check if the last column is 'False'
+        if os.path.exists(self.output_csv_path) and os.path.getsize(self.output_csv_path) > 0:
+            with open(self.output_csv_path, 'r', encoding='utf-8') as read_csv_file:
+                csv_reader = csv.reader(read_csv_file)
+                next(csv_reader)  # Skip header
+                for row in csv_reader:
+                    if tuple(item.strip().lower() for item in row[:-1]) == entry:
+                        # Check if processed state is False
+                        return row[-1].strip() == "False"
+        return True  # Assume it is unprocessed if not found
+
     async def check_forum_threads(self, guild, interaction, new_entries):
         gigchats_id = self.config["gigchats_id"]
         gigchats_channel = guild.get_channel(gigchats_id)
@@ -123,7 +158,11 @@ class Scrape(commands.Cog):
             return
 
         new_threads_created = 0
-        all_entries = self.load_existing_entries()
+        # Load only unprocessed entries
+        all_entries = [
+            entry for entry in self.load_existing_entries()
+            if entry not in new_entries and self.is_unprocessed(entry)
+        ]
 
         for entry in all_entries:
             event_date = entry[0]  # already normalised
@@ -144,6 +183,8 @@ class Scrape(commands.Cog):
                     new_threads_created += 1
                     logging.info(
                         f"Successfully created thread: {title_case_event_date}")
+                    # Mark as processed
+                    self.mark_event_as_processed(entry)
                     await asyncio.sleep(5)
                 except discord.Forbidden:
                     logging.error(
@@ -171,8 +212,15 @@ class Scrape(commands.Cog):
             )
         await interaction.followup.send(embed=embed)
 
-    async def thread_exists(self, channel, title):
-        return any(title in thread.name for thread in channel.threads)
+    async def thread_exists(self, channel, event_date):
+        # Build the regex pattern for the thread names
+        pattern = fr"^{re.escape(event_date)}( - CANCELLED)?$"
+
+        # Check if any thread matches the regex, ignoring case
+        for thread in channel.threads:
+            if re.match(pattern, thread.name, re.IGNORECASE):
+                return True
+        return False
 
 
 async def setup(bot):
