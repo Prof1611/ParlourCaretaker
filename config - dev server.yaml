@@ -6,7 +6,7 @@ owner_ids: # User IDs of the bot owners
 guild_id: 1161423690517463161 # Guild ID where the bot operates
 dm_forward_channel_id: 1161423690517463164 # Channel ID for forwarding DMs
 games_channel_id: 1281260171754082430 # Channel ID for sending games night announcements
-gigchats_id: 1288134818021904507 # Channel ID for gig chats forum channel
+gigchats_id: 1302737683537334332 # Channel ID for gig chats forum channel
 
 statuses:
  - "Prelude to Ecstasy 🏹"
