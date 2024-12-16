@@ -17,40 +17,24 @@ class Random(commands.Cog):
         name="random",
         description="Selects a random message from a specified user in the current channel."
     )
-    @app_commands.describe(username="The username of the user to search for.")
-    async def random(self, interaction: discord.Interaction, username: str):
+    @app_commands.describe(member="The member whose messages to search for.")
+    async def random(self, interaction: discord.Interaction, member: discord.Member):
         # Defer the response to avoid timeout errors
         await interaction.response.defer()
-
-        # Try to find the user by username
-        user = None
-        for member in interaction.guild.members:
-            if member.name.lower() == username.lower():
-                user = member
-                break
-        
-        if not user:
-            embed = discord.Embed(
-                title="User Not Found",
-                description=f"Could not find a user with the username '{username}'. Please check the spelling and try again.",
-                colour=discord.Colour.red(),
-            )
-            await interaction.followup.send(embed=embed)
-            return
 
         try:
             # Fetch the last 1000 messages from the current channel
             messages = []
             async for message in interaction.channel.history(limit=1000):
                 # Only include messages with text content from the specified user
-                if message.author.id == user.id and message.content.strip():
+                if message.author.id == member.id and message.content.strip():
                     messages.append(message)
 
             # Check if any valid messages were found
             if not messages:
                 embed = discord.Embed(
                     title="No Messages Found",
-                    description=f"No messages with text content from {user.display_name} were found in this channel.",
+                    description=f"No messages with text content from {member.display_name} were found in this channel.",
                     colour=discord.Colour.red(),
                 )
                 await interaction.followup.send(embed=embed)
@@ -61,7 +45,7 @@ class Random(commands.Cog):
 
             # Create an embed for the random message
             embed = discord.Embed(
-                title=f"Random Message by {user.display_name}",
+                title=f"Random Message by {member.display_name}",
                 description=random_message.content,
                 colour=discord.Colour.blue(),
                 timestamp=random_message.created_at,
