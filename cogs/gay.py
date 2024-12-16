@@ -15,7 +15,7 @@ class Gay(commands.Cog):
 
     @app_commands.command(
         name="gay",
-        description="Selects a random message containing the word 'gay' from any user in any channel."
+        description="Selects a random message containing the word 'gay' from any user in the current channel."
     )
     async def randomgaymessage(self, interaction: discord.Interaction):
         # Defer the response to avoid timeout errors
@@ -23,19 +23,18 @@ class Gay(commands.Cog):
 
         try:
             messages = []
-            
-            # Search through all text channels in the guild
-            for channel in interaction.guild.text_channels:
-                async for message in channel.history(limit=3000):
-                    # Check if the message contains 'gay' and has content
-                    if 'gay' in message.content.lower() and message.content.strip():
-                        messages.append(message)
+
+            # Search through the history of the current channel
+            async for message in interaction.channel.history(limit=3000):
+                # Check if the message contains 'gay' and has content
+                if 'gay' in message.content.lower() and message.content.strip():
+                    messages.append(message)
 
             # Check if any valid messages were found
             if not messages:
                 embed = discord.Embed(
                     title="No Messages Found",
-                    description="No messages containing the word 'gay' were found in any channel.",
+                    description="No messages containing the word 'gay' were found in this channel.",
                     colour=discord.Colour.red(),
                 )
                 await interaction.followup.send(embed=embed)
@@ -52,7 +51,7 @@ class Gay(commands.Cog):
                 timestamp=random_message.created_at,
             )
             embed.set_footer(
-                text=f"Message ID: {random_message.id} • Channel: #{random_message.channel.name}"
+                text=f"Message ID: {random_message.id} • Channel: #{interaction.channel.name}"
             )
             embed.set_author(
                 name=random_message.author.display_name,
