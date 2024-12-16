@@ -14,7 +14,7 @@ class Random(commands.Cog):
         logging.info(f"\033[35m{__name__}\033[0m synced successfully.")
 
     @app_commands.command(
-        name="user_messages",
+        name="random",
         description="Selects a random message from a specified user in the current channel."
     )
     @app_commands.describe(username="The username of the user to search for.")
