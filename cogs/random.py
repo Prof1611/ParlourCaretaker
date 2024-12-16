@@ -23,9 +23,9 @@ class Random(commands.Cog):
         await interaction.response.defer()
 
         try:
-            # Fetch the last 1000 messages from the current channel
+            # Fetch the last 3000 messages from the current channel
             messages = []
-            async for message in interaction.channel.history(limit=1000):
+            async for message in interaction.channel.history(limit=3000):
                 # Only include messages with text content from the specified user
                 if message.author.id == member.id and message.content.strip():
                     messages.append(message)

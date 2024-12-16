@@ -5,7 +5,7 @@ from discord.ext import commands
 import random
 
 
-class Harry(commands.Cog):
+class Gay(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
@@ -14,29 +14,28 @@ class Harry(commands.Cog):
         logging.info(f"\033[35m{__name__}\033[0m synced successfully.")
 
     @app_commands.command(
-        name="harry",
-        description="Selects a random message from Harry in the current channel.",
+        name="gay",
+        description="Selects a random message containing the word 'gay' from any user in any channel."
     )
-    async def harry(self, interaction: discord.Interaction):
+    async def randomgaymessage(self, interaction: discord.Interaction):
         # Defer the response to avoid timeout errors
         await interaction.response.defer()
 
-        # Define Harry's user ID
-        harry_id = 398205938265358339
-
         try:
-            # Fetch the last 3000 messages from the current channel
             messages = []
-            async for message in interaction.channel.history(limit=3000):
-                # Only include messages with text content
-                if message.author.id == harry_id and message.content.strip():
-                    messages.append(message)
+            
+            # Search through all text channels in the guild
+            for channel in interaction.guild.text_channels:
+                async for message in channel.history(limit=3000):
+                    # Check if the message contains 'gay' and has content
+                    if 'gay' in message.content.lower() and message.content.strip():
+                        messages.append(message)
 
             # Check if any valid messages were found
             if not messages:
                 embed = discord.Embed(
                     title="No Messages Found",
-                    description="No messages with text content from Harry were found in this channel.",
+                    description="No messages containing the word 'gay' were found in any channel.",
                     colour=discord.Colour.red(),
                 )
                 await interaction.followup.send(embed=embed)
@@ -47,13 +46,13 @@ class Harry(commands.Cog):
 
             # Create an embed for the random message
             embed = discord.Embed(
-                title="Random Message by Harry",
+                title="Random Message Containing 'Gay'",
                 description=random_message.content,
                 colour=discord.Colour.blue(),
                 timestamp=random_message.created_at,
             )
             embed.set_footer(
-                text=f"Message ID: {random_message.id} • Channel: #{interaction.channel.name}"
+                text=f"Message ID: {random_message.id} • Channel: #{random_message.channel.name}"
             )
             embed.set_author(
                 name=random_message.author.display_name,
@@ -101,4 +100,4 @@ class Harry(commands.Cog):
 
 
 async def setup(bot):
-    await bot.add_cog(Harry(bot))
+    await bot.add_cog(Gay(bot))
