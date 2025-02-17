@@ -2,6 +2,7 @@ import discord
 import logging
 from discord import app_commands
 from discord.ext import commands
+from discord.utils import get
 
 
 class Dm(commands.Cog):
@@ -13,8 +14,29 @@ class Dm(commands.Cog):
         logging.info(f"\033[35m{__name__}\033[0m synced successfully.")
 
     @app_commands.command(name="dm", description="Sends a specified user a custom message via DM.")
-    async def dm(self, interaction: discord.Interaction, member: discord.Member, *, message: str):
-        # Check if the bot is trying to send a message to itself
+    async def dm(self, interaction: discord.Interaction, user_input: str, *, message: str):
+        """Send a DM to a user using either their ID or username."""
+        
+        # Try to get the member from the guild first (if they are in the server)
+        member = None
+        try:
+            if user_input.isdigit():  # If the input is a number, assume it's an ID
+                member = interaction.guild.get_member(int(user_input)) or await self.bot.fetch_user(int(user_input))
+            else:  # Otherwise, try to find by username
+                member = get(interaction.guild.members, name=user_input)
+        except Exception as e:
+            logging.error(f"Error retrieving user: {e}")
+
+        if not member:
+            embed = discord.Embed(
+                title="Error",
+                description="User not found. Please provide a valid username or ID.",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # Prevent the bot from DMing itself
         if member == self.bot.user:
             embed = discord.Embed(
                 title="Error",
@@ -24,24 +46,26 @@ class Dm(commands.Cog):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        # Defer the response to avoid timeout errors
+        # Defer response to avoid timeout issues
         await interaction.response.defer()
 
-        # Send the notice to the member via DM
         try:
             await member.send(message)
-            logging.info(
-                f"Direct message successfully sent to '{member.name}'.")
+            logging.info(f"Direct message successfully sent to '{member.name}'.")
             embed = discord.Embed(
-                title="Direct Message Sent", description=f"Successfully sent message to {member.mention} via DM.", color=discord.Color.green())
+                title="Direct Message Sent",
+                description=f"Successfully sent message to {member.mention} via DM.",
+                color=discord.Color.green()
+            )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
         except discord.HTTPException as e:
-            logging.error(
-                f"Error when attempting to send direct message to '{member.name}'. Error: {e}")
-            # Handle cases where the direct message cannot be sent e.g. DM disabled
+            logging.error(f"Error sending DM to '{member.name}'. Error: {e}")
             embed = discord.Embed(
-                title="Error", description=f"Failed to send custom message to {member.mention} via DM.", color=discord.Color.red())
+                title="Error",
+                description=f"Failed to send custom message to {member.mention} via DM.",
+                color=discord.Color.red()
+            )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
 
