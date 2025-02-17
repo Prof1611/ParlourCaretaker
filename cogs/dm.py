@@ -16,6 +16,9 @@ class Dm(commands.Cog):
     async def dm(self, interaction: discord.Interaction, user_input: str, *, message: str):
         """Send a DM to a user using either their ID or username (works for non-server members too)."""
         
+        # Replace literal "\n" with actual newline characters
+        message = message.replace("\\n", "\n")
+        
         member = None
 
         try:
