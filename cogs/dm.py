@@ -54,7 +54,10 @@ class Dm(commands.Cog):
         await interaction.response.defer()
 
         try:
-            await member.send(message)
+            # Wrap the message in triple backticks to preserve paragraphs
+            formatted_message = f"```{message}```"
+            
+            await member.send(formatted_message)
             logging.info(f"Direct message successfully sent to '{member.name}'.")
             embed = discord.Embed(
                 title="Direct Message Sent",
