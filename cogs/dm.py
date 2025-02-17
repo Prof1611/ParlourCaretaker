@@ -15,10 +15,14 @@ class Dm(commands.Cog):
     @app_commands.command(name="dm", description="Sends a specified user a custom message via DM.")
     async def dm(self, interaction: discord.Interaction, user_input: str, *, message: str):
         """Send a DM to a user using either their ID or username (works for non-server members too)."""
-        
-        # Replace literal "\n" with actual newline characters
-        message = message.replace("\\n", "\n")
-        
+
+        # Print out what the bot actually received:
+        print(f"DEBUG: message = {repr(message)}")
+
+        # Replace all possible escaped newlines with actual newlines
+        message = message.replace("\\\\n", "\n")  # If we got '\\n'
+        message = message.replace("\\n", "\n")    # If we got '\n'
+
         member = None
 
         try:
