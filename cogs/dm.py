@@ -2,7 +2,6 @@ import discord
 import logging
 from discord import app_commands
 from discord.ext import commands
-from discord.utils import get
 
 
 class Dm(commands.Cog):
@@ -15,16 +14,21 @@ class Dm(commands.Cog):
 
     @app_commands.command(name="dm", description="Sends a specified user a custom message via DM.")
     async def dm(self, interaction: discord.Interaction, user_input: str, *, message: str):
-        """Send a DM to a user using either their ID or username."""
+        """Send a DM to a user using either their ID or username (works for non-server members too)."""
         
-        # Try to get the member from the guild first (if they are in the server)
         member = None
+
         try:
-            if user_input.isdigit():  # If the input is a number, assume it's an ID
-                member = interaction.guild.get_member(int(user_input)) or await self.bot.fetch_user(int(user_input))
-            else:  # Otherwise, try to find by username
-                member = get(interaction.guild.members, name=user_input)
-        except Exception as e:
+            if user_input.isdigit():  # If the input is a number, assume it's a user ID
+                member = interaction.guild.get_member(int(user_input))  # Check if they are in the server
+                if not member:
+                    member = await self.bot.fetch_user(int(user_input))  # Fetch globally if not in server
+            else:
+                member = discord.utils.get(interaction.guild.members, name=user_input)
+
+        except discord.NotFound:
+            logging.error("User not found.")
+        except discord.HTTPException as e:
             logging.error(f"Error retrieving user: {e}")
 
         if not member:
@@ -59,11 +63,19 @@ class Dm(commands.Cog):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
+        except discord.Forbidden:
+            embed = discord.Embed(
+                title="Error",
+                description=f"Failed to send a DM to {member.mention}. They might have DMs disabled.",
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
         except discord.HTTPException as e:
             logging.error(f"Error sending DM to '{member.name}'. Error: {e}")
             embed = discord.Embed(
                 title="Error",
-                description=f"Failed to send custom message to {member.mention} via DM.",
+                description=f"An unexpected error occurred while sending a DM to {member.mention}.",
                 color=discord.Color.red()
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
