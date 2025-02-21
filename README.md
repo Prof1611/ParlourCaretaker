@@ -13,7 +13,9 @@ Built for [The Last Dinner Party Discord Server](https://discord.gg/theparlour)
 
 ### Commands
 
-- `/help` Sends a list of all commands.<br><br>
+- `/help` Sends a list of all commands.
+- `/uptime` Displays how long the bot has been running.
+- `/restart` Restarts the bot.<br><br>
 - `/ban [user] [reason]` Permanently bans a user and sends them a notice with the reason via DM.
 - `/tempban [user] [duration] [reason]` Temporarily bans a user and sends them a notice with the reason via DM.
 - `/kick [user] [reason]` Kicks a user and sends them a notice with the reason via DM.

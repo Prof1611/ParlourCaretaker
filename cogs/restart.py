@@ -1,6 +1,7 @@
 import discord
 import logging
-import subprocess
+import os
+import sys
 from discord import app_commands
 from discord.ext import commands
 
@@ -13,33 +14,29 @@ class Restart(commands.Cog):
     async def on_ready(self):
         logging.info(f"\033[35m{__name__}\033[0m synced successfully.")
 
-    @app_commands.command(name="restart", description="Restarts the bot service.")
+    @app_commands.command(name="restart", description="Restarts the bot.")
     async def restart(self, interaction: discord.Interaction):
-        """Restarts the bot service using systemctl."""
-        await interaction.response.defer()
+        # Send a message about the restart process
+        embed = discord.Embed(
+            title="Restarting Bot...",
+            description="The bot is restarting. Please wait.",
+            color=discord.Color.orange(),
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
+        # Try to restart the bot using os.execv
         try:
-            # Run the restart command
-            subprocess.run(["sudo", "systemctl", "restart", "monitor.service"], check=True)
-
-            embed = discord.Embed(
-                title="Restarting Bot",
-                description="The bot service is restarting...",
-                color=discord.Color.orange(),
-            )
-            await interaction.followup.send(embed=embed)
-
-            logging.info("Bot service restarted successfully.")
-
-        except subprocess.CalledProcessError as e:
-            logging.error(f"Failed to restart bot service: {e}")
-
-            embed = discord.Embed(
-                title="Restart Failed",
-                description="Could not restart the bot service. Check system logs for details.",
+            os.execv(sys.executable, ["python"] + sys.argv)  # Restarts the bot script
+        except Exception as e:
+            logging.error(f"Failed to restart the bot. Error: {e}")
+            
+            # Send an error message to the user as an ephemeral message
+            error_embed = discord.Embed(
+                title="Error",
+                description="Failed to restart the bot. Please try again later.",
                 color=discord.Color.red(),
             )
-            await interaction.followup.send(embed=embed)
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
 
 
 async def setup(bot):
