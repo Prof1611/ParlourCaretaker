@@ -105,7 +105,7 @@ The Parlour Moderation Team
             await interaction.response.send_message(
                 embed=discord.Embed(
                     title="Warning",
-                    description=f"⚠️ Could not send a DM to {member.mention}. They may have DMs disabled.",
+                    description=f"Could not send a DM to {member.mention}. They may have DMs disabled.",
                     color=discord.Color.orange(),
                 ),
                 ephemeral=True,
@@ -116,7 +116,7 @@ The Parlour Moderation Team
 
         embed = discord.Embed(
             title="Member Banned",
-            description=f"✅ Temporarily banned {member.mention} for **{duration}**.\n\n**Reason:**\n{reason}",
+            description=f"Temporarily banned {member.mention} for **{duration}**.\n\n**Reason:**\n{reason}",
             color=discord.Color.green(),
         )
         await interaction.response.send_message(embed=embed)
