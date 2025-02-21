@@ -28,20 +28,20 @@ class Message(commands.Cog):
         # Send the custom message in the specified channel
         try:
             await channel.send(message)
-            logging.info(f"Custom message successfully sent in '{channel}'.")
+            logging.info(f"Custom message successfully sent in '#{channel}'.")
             embed = discord.Embed(
                 title="Custom Message Sent",
-                description=f"Successfully sent message in {channel} ",
+                description=f"Successfully sent message in #{channel} ",
                 color=discord.Color.green(),
             )
             await interaction.followup.send(embed=embed)
 
         except discord.HTTPException as e:
             if e.status == 403:  # No access to channel
-                logging.error(f"No access to {channel}. Error: {e}")
+                logging.error(f"No access to #{channel}. Error: {e}")
                 embed = discord.Embed(
                     title="Error",
-                    description=f"I don't have access to {channel}!",
+                    description=f"I don't have access to #{channel}!",
                     color=discord.Color.red(),
                 )
                 await interaction.followup.send(embed=embed)
@@ -65,17 +65,17 @@ class Message(commands.Cog):
                 logging.error(f"Discord API Error. Error: {e}")
                 embed = discord.Embed(
                     title="Error",
-                    description=f"Failed to send custom message in {channel}. Please try later.",
+                    description=f"Failed to send custom message in #{channel}. Please try later.",
                     color=discord.Color.red(),
                 )
                 await interaction.followup.send(embed=embed)
             else:  # Other errors
                 logging.error(
-                    f"Error when attempting to send custom message in {channel}. Error: {e}"
+                    f"Error when attempting to send custom message in #{channel}. Error: {e}"
                 )
                 embed = discord.Embed(
                     title="Error",
-                    description=f"Failed to send custom message in {channel}.",
+                    description=f"Failed to send custom message in #{channel}.",
                     color=discord.Color.red(),
                 )
                 await interaction.followup.send(embed=embed)
