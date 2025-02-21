@@ -2,6 +2,8 @@ import discord
 import logging
 import os
 import sys
+import subprocess
+import platform
 from discord import app_commands
 from discord.ext import commands
 
@@ -16,7 +18,7 @@ class Restart(commands.Cog):
 
     @app_commands.command(name="restart", description="Restarts the bot.")
     async def restart(self, interaction: discord.Interaction):
-        # Send a message about the restart process
+        """Handles bot restart based on the operating system."""
         embed = discord.Embed(
             title="Restarting Bot...",
             description="The bot is restarting. Please wait.",
@@ -24,16 +26,25 @@ class Restart(commands.Cog):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        # Try to restart the bot using os.execv
+        # Detect OS
+        system_os = platform.system()
+
         try:
-            os.execv(sys.executable, ["python"] + sys.argv)  # Restarts the bot script
+            if system_os == "Linux":
+                # Restart monitor.service on Linux
+                subprocess.run(["sudo", "systemctl", "restart", "monitor.service"], check=True)
+                logging.info("Restart command issued successfully via systemctl.")
+
+            elif system_os == "Windows":
+                # Restart using os.execv on Windows
+                logging.info("Restarting bot using os.execv on Windows...")
+                os.execv(sys.executable, [sys.executable] + sys.argv)  # Restart bot script
+
         except Exception as e:
-            logging.error(f"Failed to restart the bot. Error: {e}")
-            
-            # Send an error message to the user as an ephemeral message
+            logging.error(f"Failed to restart: {e}")
             error_embed = discord.Embed(
-                title="Error",
-                description="Failed to restart the bot. Please try again later.",
+                title="Restart Failed",
+                description=f"Error: `{e}`",
                 color=discord.Color.red(),
             )
             await interaction.followup.send(embed=error_embed, ephemeral=True)
