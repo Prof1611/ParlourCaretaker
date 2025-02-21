@@ -6,17 +6,17 @@ import os
 import yaml
 import asyncio
 import logging
-import datetime  # <-- Needed for uptime
+
 
 # Define ANSI escape sequences for colours
 class CustomFormatter(logging.Formatter):
 
     LEVEL_COLOURS = {
-        logging.DEBUG: "\033[0;36m",    # Cyan
-        logging.INFO: "\033[0;32m",     # Green
+        logging.DEBUG: "\033[0;36m",  # Cyan
+        logging.INFO: "\033[0;32m",  # Green
         logging.WARNING: "\033[0;33m",  # Yellow
-        logging.ERROR: "\033[0;31m",    # Red
-        logging.CRITICAL: "\033[1;41m", # Red background w/ bold text
+        logging.ERROR: "\033[0;31m",  # Red
+        logging.CRITICAL: "\033[1;41m",  # Red background w/ bold text
     }
     RESET_COLOUR = "\033[0m"
 
@@ -28,6 +28,7 @@ class CustomFormatter(logging.Formatter):
         )
         record.levelname = level_name
         return super().format(record)
+
 
 # Configure logging
 formatter = CustomFormatter(
@@ -55,24 +56,19 @@ intents.members = True
 # Initialize the bot
 bot = commands.Bot(command_prefix=">", intents=intents)
 
-# Store the bot's start time for uptime
-bot_start_time = datetime.datetime.utcnow()
-
 # Load statuses from the config file
 bot_statuses = random.choice(config["statuses"])
 
 dm_forward_channel_id = config["dm_forward_channel_id"]
-guild_id = config["guild_id"]
+
 
 @tasks.loop(seconds=120)
 async def change_bot_status():
     """Changes the bot's 'listening' status every 120 seconds."""
     next_status = random.choice(config["statuses"])
-    activity = discord.Activity(
-        type=discord.ActivityType.listening,
-        name=next_status
-    )
+    activity = discord.Activity(type=discord.ActivityType.listening, name=next_status)
     await bot.change_presence(status=discord.Status.online, activity=activity)
+
 
 @bot.event
 async def on_ready():
@@ -89,22 +85,6 @@ async def on_ready():
     except Exception as e:
         logging.error(f"Error syncing application commands: {e}")
 
-# ---------------------------
-# UPTIME Slash Command
-# ---------------------------
-@bot.tree.command(name="uptime", description="Shows how long the bot has been running.")
-async def uptime_command(interaction: discord.Interaction):
-    """Displays the bot's uptime since it started."""
-    now = datetime.datetime.utcnow()
-    delta = now - bot_start_time
-
-    hours, remainder = divmod(int(delta.total_seconds()), 3600)
-    minutes, seconds = divmod(remainder, 60)
-
-    await interaction.response.send_message(
-        f"**Uptime:** {hours}h {minutes}m {seconds}s",
-        ephemeral=True  # Only the user who invoked sees this
-    )
 
 @bot.event
 async def on_message(message):
@@ -117,40 +97,41 @@ async def on_message(message):
 
     # Check if this is a DM
     if isinstance(message.channel, discord.DMChannel):
-        guild = bot.get_guild(guild_id)
-        if guild:
-            target_channel = guild.get_channel(dm_forward_channel_id)
-            if target_channel:
-                try:
-                    embed = discord.Embed(
-                        title=f"Direct Message from '{message.author}'",
-                        description=message.content,
-                        color=discord.Color.green()
-                    )
-                    await target_channel.send(embed=embed)
-                    logging.info(
-                        f"DM from \033[35m{message.author}\033[0m forwarded to \033[35m#{target_channel.name}\033[0m"
-                    )
-                except discord.HTTPException as e:
-                    logging.error(f"Error forwarding DM: {e}")
-            else:
-                logging.error("Target channel not found in the guild for DM forwarding.")
-        else:
-            logging.error("Guild not found for DM forwarding.")
+        # Directly use the stored dm_forward_channel_id
+        target_channel = bot.get_channel(
+            dm_forward_channel_id
+        )  # Use bot.get_channel instead of accessing a guild
 
-# ---------------------------
-# LOAD ALL COGS
-# ---------------------------
+        if target_channel:
+            try:
+                embed = discord.Embed(
+                    title=f"Direct Message from '{message.author}'",
+                    description=message.content,
+                    color=discord.Color.green(),
+                )
+                await target_channel.send(embed=embed)
+                logging.info(
+                    f"DM from \033[35m{message.author}\033[0m forwarded to \033[35m#{target_channel.name}\033[0m"
+                )
+            except discord.HTTPException as e:
+                logging.error(f"Error forwarding DM: {e}")
+        else:
+            logging.error("Target channel not found for DM forwarding.")
+
+
+# Load all cogs
 async def load_cogs():
     """Loads all .py files in the 'cogs' folder as extensions."""
     for filename in os.listdir("./cogs"):
         if filename.endswith(".py"):
             await bot.load_extension(f"cogs.{filename[:-3]}")
 
+
 async def main():
     async with bot:
         await load_cogs()
         await bot.start(BOT_TOKEN)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

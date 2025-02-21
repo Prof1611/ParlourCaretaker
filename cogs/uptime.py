@@ -1,25 +1,34 @@
-# cogs/uptime.py
-
 import discord
+import logging
+import time
+from discord import app_commands
 from discord.ext import commands
-import datetime
 
 class Uptime(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot):
         self.bot = bot
-        # Record the bot's start time
-        self.start_time = datetime.datetime.utcnow()
+        self.start_time = time.time()  # Record the bot's start time
 
-    @commands.command(name="uptime")
-    async def uptime(self, ctx: commands.Context):
-        """Shows how long the bot has been running."""
-        now = datetime.datetime.utcnow()
-        delta = now - self.start_time
+    @commands.Cog.listener()
+    async def on_ready(self):
+        logging.info(f"\033[35m{__name__}\033[0m synced successfully.")
 
-        hours, remainder = divmod(int(delta.total_seconds()), 3600)
+    @app_commands.command(name="uptime", description="Shows how long the bot has been running.")
+    async def uptime(self, interaction: discord.Interaction):
+        uptime_seconds = int(time.time() - self.start_time)
+        days, remainder = divmod(uptime_seconds, 86400)
+        hours, remainder = divmod(remainder, 3600)
         minutes, seconds = divmod(remainder, 60)
+        
+        uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
+        logging.info(f"Uptime command used. Bot has been running for: {uptime_str}")
+        
+        embed = discord.Embed(
+            title="Bot Uptime",
+            description=f"The bot has been running for: `{uptime_str}`",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        await ctx.send(f"**Uptime:** {hours}h {minutes}m {seconds}s")
-
-async def setup(bot: commands.Bot):
+async def setup(bot):
     await bot.add_cog(Uptime(bot))
