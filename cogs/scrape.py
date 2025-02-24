@@ -11,6 +11,7 @@ import os
 import asyncio
 from datetime import datetime
 import re
+import platform
 
 
 class Scrape(commands.Cog):
@@ -49,16 +50,37 @@ class Scrape(commands.Cog):
         chrome_options.add_argument("--log-level=3")
         os.environ["WDM_LOG_LEVEL"] = "3"
 
+        # Detect the operating system
+        system_os = platform.system()
+        arch = platform.machine()
+        logging.info(f"Detected OS: {system_os}, Architecture: {arch}")
+
         try:
-            driver = webdriver.Chrome(
-                service=Service(ChromeDriverManager().install()), options=chrome_options
-            )
+            if system_os == "Windows":
+                # Windows: Use WebDriver Manager
+                driver = webdriver.Chrome(
+                    service=Service(ChromeDriverManager().install()),
+                    options=chrome_options,
+                )
+
+            elif system_os == "Linux" and arch in ["arm64", "aarch64"]:
+                # Raspberry Pi: Use manually installed ChromiumDriver
+                chrome_options.binary_location = "/usr/bin/chromium-browser"
+                driver = webdriver.Chrome(
+                    service=Service("/usr/local/bin/chromedriver"),
+                    options=chrome_options,
+                )
+
+            else:
+                logging.error("Unsupported OS for this scraper.")
+                return []
+
             driver.get("https://www.thelastdinnerparty.co.uk/#live")
             driver.implicitly_wait(10)
 
             event_rows = driver.find_elements(By.CLASS_NAME, "seated-event-row")
             logging.info(
-                "Successfully retrieved %d event rows from website", len(event_rows)
+                f"Successfully retrieved {len(event_rows)} event rows from website"
             )
 
             # Loop through each event and collect its data
@@ -74,15 +96,8 @@ class Scrape(commands.Cog):
                 ).text.strip()
 
                 date = self.format_date(date_str)
+                entry = (date.lower(), venue.lower(), location.lower())
 
-                # Normalise new entry data for easy comparison and use
-                entry = (
-                    date.strip().lower(),
-                    venue.strip().lower(),
-                    location.strip().lower(),
-                )
-
-                # Add the event to new entries
                 new_entries.append((date, venue, location))
                 logging.info(f"New entry found: {entry}")
 
@@ -115,13 +130,11 @@ class Scrape(commands.Cog):
 
         new_threads_created = 0
 
-        # Iterate over the newly scraped events and try to create a thread for each
         for entry in new_entries:
-            event_date = entry[0]  # already normalised
+            event_date = entry[0]
             venue = entry[1]
             location = entry[2]
 
-            # Check if the thread already exists for this event date
             exists = await self.thread_exists(gigchats_channel, event_date)
             logging.info(
                 f"Does thread '{event_date.title()}' exist in channel '{gigchats_channel.name}'? {exists}"
@@ -160,7 +173,7 @@ class Scrape(commands.Cog):
             logging.info(f"{new_threads_created} new threads created.")
             embed = discord.Embed(
                 title=f"{new_threads_created} new threads created",
-                description="New show threads have been created for upcoming events.",
+                description="New threads successfully created for upcoming events.",
                 color=discord.Color.green(),
             )
         else:
@@ -173,10 +186,8 @@ class Scrape(commands.Cog):
         await interaction.followup.send(embed=embed)
 
     async def thread_exists(self, channel, event_date):
-        # Build the regex pattern for the thread names
         pattern = rf"^{re.escape(event_date)}( - CANCELLED)?$"
 
-        # Check if any thread matches the regex, ignoring case
         for thread in channel.threads:
             if re.match(pattern, thread.name, re.IGNORECASE):
                 return True
