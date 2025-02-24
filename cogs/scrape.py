@@ -66,10 +66,14 @@ class Scrape(commands.Cog):
             elif system_os == "Linux" and arch in ["arm64", "aarch64"]:
                 # Raspberry Pi: Use manually installed ChromiumDriver
                 chrome_options.binary_location = "/usr/bin/chromium-browser"
-                driver = webdriver.Chrome(
-                    service=Service("/usr/local/bin/chromedriver"),
-                    options=chrome_options,
-                )
+                chromedriver_path = "/usr/bin/chromedriver"  # Path to chromedriver
+                if not os.path.exists(chromedriver_path):
+                    logging.error(
+                        "Chromedriver not found! Make sure it's installed at /usr/bin/chromedriver."
+                    )
+                    return []
+                service = Service(chromedriver_path)
+                driver = webdriver.Chrome(service=service, options=chrome_options)
 
             else:
                 logging.error("Unsupported OS for this scraper.")
