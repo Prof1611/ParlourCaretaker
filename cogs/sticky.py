@@ -6,12 +6,20 @@ from discord import app_commands
 from discord.ext import commands
 
 
+# Modal for multi-line sticky message input with format option.
 class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
-    sticky_input = discord.ui.TextInput(
+    sticky_message = discord.ui.TextInput(
         label="Sticky Message",
         style=discord.TextStyle.long,
         required=True,
         placeholder="Enter your sticky message here...",
+    )
+    format_choice = discord.ui.TextInput(
+        label="Format (normal/embed)",
+        style=discord.TextStyle.short,
+        required=False,
+        placeholder="'normal' (default) or 'embed'",
+        max_length=10,
     )
 
     def __init__(self, bot: commands.Bot, sticky_cog: "Sticky"):
@@ -20,9 +28,15 @@ class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
         self.sticky_cog = sticky_cog
 
     async def on_submit(self, interaction: discord.Interaction):
+        fmt = (
+            self.format_choice.value.strip().lower()
+            if self.format_choice.value
+            else "normal"
+        )
+        content = self.sticky_message.value
         channel = interaction.channel
 
-        # Delete the old sticky message if it exists.
+        # If an old sticky exists, delete it.
         if channel.id in self.sticky_cog.stickies:
             previous_sticky = self.sticky_cog.stickies[channel.id]
             try:
@@ -32,23 +46,34 @@ class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
                 pass
 
         try:
-            # Send the new sticky message using the multi-line input.
-            sticky_message = await channel.send(self.sticky_input.value)
-            # Update the sticky data in the cog.
+            # Send the new sticky message in the chosen format.
+            if fmt == "embed":
+                embed = discord.Embed(
+                    title="Sticky Message",
+                    description=content,
+                    color=discord.Color.blurple(),
+                )
+                sticky_msg = await channel.send(embed=embed)
+            else:
+                sticky_msg = await channel.send(content)
+
+            # Store the sticky details (content, message ID, and format)
             self.sticky_cog.stickies[channel.id] = {
-                "content": sticky_message.content,
-                "message_id": sticky_message.id,
+                "content": content,
+                "message_id": sticky_msg.id,
+                "format": fmt,
             }
             self.sticky_cog.save_stickies()
 
             logging.info(f"Sticky message successfully set in #{channel}")
 
-            embed = discord.Embed(
+            # Confirm to the user with an ephemeral message.
+            confirm_embed = discord.Embed(
                 title="Sticky Message Set",
                 description=f"Successfully set sticky message in #{channel}!",
                 color=discord.Color.green(),
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=confirm_embed, ephemeral=True)
         except discord.HTTPException as e:
             await self.sticky_cog.handle_error(e, channel, interaction)
 
@@ -57,7 +82,7 @@ class Sticky(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         # Dictionary to store sticky details per channel:
-        # key: channel id, value: {"content": str, "message_id": int}
+        # key: channel id, value: {"content": str, "message_id": int, "format": "normal" or "embed"}
         self.stickies = {}
         self.load_stickies()
 
@@ -80,6 +105,7 @@ class Sticky(commands.Cog):
                 str(channel_id): {
                     "content": data["content"],
                     "message_id": data["message_id"],
+                    "format": data.get("format", "normal"),
                 }
                 for channel_id, data in self.stickies.items()
             }
@@ -97,19 +123,29 @@ class Sticky(commands.Cog):
                     await old_message.delete()
                 except discord.NotFound:
                     pass
-                new_sticky = await channel.send(sticky["content"])
+                fmt = sticky.get("format", "normal")
+                new_sticky = await self._send_sticky(channel, sticky["content"], fmt)
                 self.stickies[channel.id] = {
                     "content": sticky["content"],
                     "message_id": new_sticky.id,
+                    "format": fmt,
                 }
         self.save_stickies()
+
+    async def _send_sticky(self, channel: discord.TextChannel, content: str, fmt: str):
+        """Helper method to send a sticky message in the chosen format."""
+        if fmt == "embed":
+            embed = discord.Embed(title="Sticky Message", description=content, color=discord.Color.blurple())
+            return await channel.send(embed=embed)
+        else:
+            return await channel.send(content)
 
     @app_commands.command(
         name="setsticky",
         description="Set a sticky message in the current channel.",
     )
     async def set_sticky(self, interaction: discord.Interaction):
-        """Open a modal to set the sticky message for the current channel."""
+        """Open a modal form to set the sticky message for the current channel."""
         modal = StickyModal(self.bot, self)
         await interaction.response.send_modal(modal)
 
@@ -121,7 +157,6 @@ class Sticky(commands.Cog):
         """Remove the sticky message for the current channel."""
         await interaction.response.defer()
         channel = interaction.channel
-
         if channel.id not in self.stickies:
             embed = discord.Embed(
                 title="No Sticky Message",
@@ -161,29 +196,34 @@ class Sticky(commands.Cog):
         channel = message.channel
         if channel.id in self.stickies:
             sticky = self.stickies[channel.id]
-            # Retrieve the latest message in the channel
+            # Retrieve the latest message in the channel.
             history = [msg async for msg in channel.history(limit=1)]
             if history:
                 last_message = history[0]
-                # If the last message is already the sticky, do nothing.
-                if (
-                    last_message.author == self.bot.user
-                    and last_message.content == sticky["content"]
-                ):
-                    return
+                fmt = sticky.get("format", "normal")
+                if last_message.author == self.bot.user:
+                    if fmt == "normal" and last_message.content == sticky["content"]:
+                        return
+                    elif (
+                        fmt == "embed"
+                        and last_message.embeds
+                        and last_message.embeds[0].description == sticky["content"]
+                    ):
+                        return
 
-            # Delete the old sticky message if it exists.
             try:
                 old_message = await channel.fetch_message(sticky["message_id"])
                 await old_message.delete()
             except discord.NotFound:
                 pass
 
-            # Repost the sticky message so it becomes the latest.
-            new_sticky = await channel.send(sticky["content"])
+            new_sticky = await self._send_sticky(
+                channel, sticky["content"], sticky.get("format", "normal")
+            )
             self.stickies[channel.id] = {
                 "content": sticky["content"],
                 "message_id": new_sticky.id,
+                "format": sticky.get("format", "normal"),
             }
             self.save_stickies()
 
