@@ -2,7 +2,6 @@ import discord
 import logging
 import json
 import asyncio
-import time
 from discord import app_commands
 from discord.ext import commands
 
@@ -118,9 +117,9 @@ class Sticky(commands.Cog):
         self.load_stickies()
         self.initialised = False  # Guard flag to prevent multiple on_ready executions
 
-        # For throttling sticky updates per channel.
-        self.last_update = {}  # channel_id: timestamp
-        self.update_cooldown = 3  # seconds
+        # Removing cooldown-related attributes.
+        # self.last_update = {}
+        # self.update_cooldown = 3
 
         # For ensuring only one sticky update per channel at a time.
         self.locks = {}  # channel_id: asyncio.Lock
@@ -154,9 +153,12 @@ class Sticky(commands.Cog):
             logging.error(f"Failed to save stickies to file: {e}")
 
     async def update_sticky_for_channel(
-        self, channel: discord.abc.Messageable, sticky: dict
+        self, channel: discord.abc.Messageable, sticky: dict, force_update: bool = False
     ):
-        """Centralised logic for updating a sticky message in a channel."""
+        """Centralised logic for updating a sticky message in a channel.
+
+        The force_update parameter is used on startup to bypass any checks.
+        """
         # Check that the channel is a text channel.
         if not isinstance(channel, discord.TextChannel):
             logging.warning(
@@ -172,13 +174,7 @@ class Sticky(commands.Cog):
             )
             return
 
-        # Throttle updates to avoid rate limits.
-        now = time.time()
-        if channel.id in self.last_update:
-            elapsed = now - self.last_update[channel.id]
-            if elapsed < self.update_cooldown:
-                return
-        self.last_update[channel.id] = now
+        # Removing throttle checks entirely.
 
         # Use a per-channel lock to avoid concurrent updates.
         lock = self.locks.setdefault(channel.id, asyncio.Lock())
@@ -213,13 +209,13 @@ class Sticky(commands.Cog):
         if self.initialised:
             return
         self.initialised = True
-        logging.info(f"\033[35mSticky\033[0m cog synced successfully.")
+        logging.info("Sticky cog synced successfully.")
 
-        # On startup, for each channel with a sticky, update the sticky.
+        # On startup, for each channel with a sticky, force-update the sticky.
         for channel_id, sticky in list(self.stickies.items()):
             channel = self.bot.get_channel(int(channel_id))
             if channel:
-                await self.update_sticky_for_channel(channel, sticky)
+                await self.update_sticky_for_channel(channel, sticky, force_update=True)
 
     async def _send_sticky(self, channel: discord.TextChannel, content: str, fmt: str):
         """Helper method to send a sticky message in the chosen format."""
