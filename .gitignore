@@ -2,3 +2,4 @@ cogs/__pycache__/
 bans.json
 scraper_output.csv
 presence-test.py
+stickies.json

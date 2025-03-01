@@ -15,13 +15,7 @@ class Message(commands.Cog):
     @app_commands.command(
         name="message", description="Sends a custom message in a specified channel."
     )
-    async def message(
-        self,
-        interaction: discord.Interaction,
-        channel: discord.TextChannel,
-        *,
-        message: str,
-    ):
+    async def message(self, interaction: discord.Interaction, channel: discord.TextChannel, *, message: str,):
         # Defer the response to avoid timeout errors
         await interaction.response.defer()
 
