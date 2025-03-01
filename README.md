@@ -8,6 +8,7 @@ Built for [The Last Dinner Party Discord Server](https://discord.gg/theparlour)
 - Custom moderation and utility commands.
 - Auto logging for disciplinary actions.
 - Direct message forwarding.
+- Sticky messages.
 
 ## Usage
 
@@ -23,6 +24,8 @@ Built for [The Last Dinner Party Discord Server](https://discord.gg/theparlour)
 - `/message [channel] [message]` Sends a custom message to the specified channel.
 - `/gamesnight [message]` Sends a games night announcement in #parlour-games.
 - `/scrape` Checks the band's website for new shows and updates #gig-chats.
+- `/setsticky` Sets a sticky message in the current channel.
+- `/removesticky` Removes the sticky message from the current channel.
 
 ### Logging
 

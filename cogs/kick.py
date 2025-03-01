@@ -16,7 +16,7 @@ class Kick(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info(f"\033[35m{__name__}\033[0m synced successfully.")
+        logging.info(f"\033[35mKick\033[0m cog synced successfully.")
 
     @app_commands.command(name="kick", description="Kicks a member and sends them a notice via DM.")
     async def kick(self, interaction: discord.Interaction, member: discord.Member, *, reason: str):

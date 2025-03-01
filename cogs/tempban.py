@@ -17,7 +17,7 @@ class TempBan(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info(f"\033[35m{__name__}\033[0m synced successfully.")
+        logging.info(f"\033[35mTempban\033[0m cog synced successfully.")
 
     def load_bans(self):
         if os.path.exists(self.ban_file):

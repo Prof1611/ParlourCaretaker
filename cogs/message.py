@@ -10,7 +10,7 @@ class Message(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info(f"\033[35m{__name__}\033[0m synced successfully.")
+        logging.info(f"\033[35mMessage\033[0m cog synced successfully.")
 
     @app_commands.command(
         name="message", description="Sends a custom message in a specified channel."
