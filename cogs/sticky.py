@@ -120,6 +120,10 @@ class Sticky(commands.Cog):
         # For ensuring only one sticky update per channel at a time.
         self.locks = {}  # channel_id: asyncio.Lock
 
+        # For debouncing updates to avoid flooding API calls.
+        self.debounce_tasks = {}  # channel_id: asyncio.Task
+        self.debounce_interval = 1.0  # seconds
+
     def load_stickies(self):
         """Load sticky messages from a JSON file."""
         try:
@@ -203,7 +207,6 @@ class Sticky(commands.Cog):
         if not self.initialised:
             self.initialised = True
             logging.info("\033[35mSticky\033[0m cog synced successfully.")
-
             # On startup, for each channel with a sticky, force-update the sticky.
             for channel_id, sticky in list(self.stickies.items()):
                 channel = self.bot.get_channel(int(channel_id))
@@ -294,24 +297,22 @@ class Sticky(commands.Cog):
 
         channel = message.channel
         if channel.id in self.stickies:
-            sticky = self.stickies[channel.id]
-            fmt = sticky.get("format", "normal")
-            # Retrieve the latest message in the channel.
-            history = [msg async for msg in channel.history(limit=1)]
-            if history:
-                last_message = history[0]
-                if last_message.author == self.bot.user:
-                    if fmt == "normal" and last_message.content == sticky["content"]:
-                        return
-                    elif (
-                        fmt == "embed"
-                        and last_message.embeds
-                        and last_message.embeds[0].title == "Sticky Message"
-                        and last_message.embeds[0].description == sticky["content"]
-                    ):
-                        return
+            # Instead of immediately updating, debounce the update.
+            if channel.id in self.debounce_tasks:
+                # A debounce task is already scheduled; do nothing.
+                return
+            # Schedule an update after a short delay.
+            self.debounce_tasks[channel.id] = self.bot.loop.create_task(
+                self._debounced_update(channel, self.stickies[channel.id])
+            )
 
+    async def _debounced_update(self, channel: discord.abc.Messageable, sticky: dict):
+        try:
+            await asyncio.sleep(self.debounce_interval)
             await self.update_sticky_for_channel(channel, sticky)
+        finally:
+            # Remove the task from the dictionary regardless of success or failure.
+            self.debounce_tasks.pop(channel.id, None)
 
     async def handle_error(self, e, channel, interaction):
         """Handle error cases and send an appropriate response."""
