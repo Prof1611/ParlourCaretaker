@@ -115,7 +115,7 @@ class Sticky(commands.Cog):
         # key: channel id, value: {"content": str, "message_id": int, "format": "normal" or "embed"}
         self.stickies = {}
         self.load_stickies()
-        self.initialised = False  # Guard flag to prevent multiple on_ready executions
+        self.initialised = False  # Guard flag
 
         # For ensuring only one sticky update per channel at a time.
         self.locks = {}  # channel_id: asyncio.Lock
@@ -203,26 +203,26 @@ class Sticky(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        # Prevent reinitialisation on reconnection.
-        if not self.initialised:
-            self.initialised = True
-            logging.info("\033[35mSticky\033[0m cog synced successfully.")
-            # On startup, for each channel with a sticky, force-update the sticky.
-            for channel_id, sticky in list(self.stickies.items()):
-                channel = self.bot.get_channel(int(channel_id))
-                if channel:
-                    await self.update_sticky_for_channel(
-                        channel, sticky, force_update=True
-                    )
-
-    @commands.Cog.listener()
-    async def on_resumed(self):
-        # This listener is triggered when the bot resumes after a disconnect.
-        logging.info("Bot resumed. Updating sticky messages in all channels.")
+        # Remove any guard preventing updates.
+        self.initialised = False
+        logging.info("\033[35mSticky\033[0m cog syncing on_ready.")
+        # On startup, force-update sticky messages for each channel.
         for channel_id, sticky in list(self.stickies.items()):
             channel = self.bot.get_channel(int(channel_id))
             if channel:
                 await self.update_sticky_for_channel(channel, sticky, force_update=True)
+        self.initialised = True
+
+    @commands.Cog.listener()
+    async def on_resumed(self):
+        logging.info("Bot resumed. Updating sticky messages in all channels.")
+        # Reset the flag to allow updates on resume.
+        self.initialised = False
+        for channel_id, sticky in list(self.stickies.items()):
+            channel = self.bot.get_channel(int(channel_id))
+            if channel:
+                await self.update_sticky_for_channel(channel, sticky, force_update=True)
+        self.initialised = True
 
     async def _send_sticky(self, channel: discord.TextChannel, content: str, fmt: str):
         """Helper method to send a sticky message in the chosen format."""
@@ -297,11 +297,9 @@ class Sticky(commands.Cog):
 
         channel = message.channel
         if channel.id in self.stickies:
-            # Instead of immediately updating, debounce the update.
+            # Instead of updating immediately, debounce the update.
             if channel.id in self.debounce_tasks:
-                # A debounce task is already scheduled; do nothing.
                 return
-            # Schedule an update after a short delay.
             self.debounce_tasks[channel.id] = self.bot.loop.create_task(
                 self._debounced_update(channel, self.stickies[channel.id])
             )
@@ -311,7 +309,6 @@ class Sticky(commands.Cog):
             await asyncio.sleep(self.debounce_interval)
             await self.update_sticky_for_channel(channel, sticky)
         finally:
-            # Remove the task from the dictionary regardless of success or failure.
             self.debounce_tasks.pop(channel.id, None)
 
     async def handle_error(self, e, channel, interaction):

@@ -1,35 +1,39 @@
 # The Parlour Caretaker Discord Bot
 
-The Parlour Caretaker is a custom Discord bot designed to assist with moderation tasks, such as sending notices to users and logging actions. This bot is tailored to handle specific server requirements with ease, ensuring smooth server management.
-
-Built for [The Last Dinner Party Discord Server](https://discord.gg/theparlour)
+The Parlour Caretaker is a custom Discord bot designed to assist with moderation and utility tasks for [The Last Dinner Party Discord Server](https://discord.gg/theparlour). It provides a range of features to help streamline server management and enhance community engagement.
 
 ## Features
-- Custom moderation and utility commands.
-- Auto logging for disciplinary actions.
-- Direct message forwarding.
-- Sticky messages.
+- Custom Moderation Commands:
+Easily ban, kick, or temporarily ban users, with automated DM notifications.
+- Utility Commands:
+Send customised messages, forward direct messages, and set sticky messages that remain visible in channels.
+- Auto Logging:
+All moderation actions are automatically logged to a designated channel, helping moderators track actions and maintain transparency.
+- Games Night Announcements:
+Quickly announce games nights in a dedicated channel.
+- Show Scraping:
+Checks the band’s website for new shows and updates a specified channel with the latest events.
 
 ## Usage
 
 ### Commands
 
-- `/help` Sends a list of all commands.
+- `/help` Displays a list of available commands.
 - `/uptime` Displays how long the bot has been running.
 - `/restart` Restarts the bot.<br><br>
-- `/ban [user] [reason]` Permanently bans a user and sends them a notice with the reason via DM.
-- `/tempban [user] [duration] [reason]` Temporarily bans a user and sends them a notice with the reason via DM.
-- `/kick [user] [reason]` Kicks a user and sends them a notice with the reason via DM.
-- `/dm [user] [message]` Sends a specified user a custom message via DM.
-- `/message [channel] [message]` Sends a custom message to the specified channel.
-- `/gamesnight [message]` Sends a games night announcement in #parlour-games.
-- `/scrape` Checks the band's website for new shows and updates #gig-chats.
-- `/setsticky` Sets a sticky message in the current channel.
+- `/ban [user] [reason]` Permanently bans a user and sends them a DM with the reason.
+- `/tempban [user] [duration] [reason]` Temporarily bans a user and sends them a DM with the reason and duration.
+- `/kick [user] [reason]` Kicks a user and sends them a DM with the reason.
+- `/dm [user] [message]` Sends a custom direct message to a specified user.
+- `/message [channel] [message]` Posts a custom message in a designated channel.
+- `/gamesnight [message]` Sends a games night announcement in the #parlour-games channel.
+- `/scrape` Checks the band’s website for new shows and updates the #gig-chats channel.
+- `/setsticky` Sets a sticky message in the current channel that remains at the bottom.
 - `/removesticky` Removes the sticky message from the current channel.
 
 ### Logging
 
-All moderation actions are automatically logged in a specified channel. This helps keep track of actions taken by moderators.
+All moderation and administrative actions are automatically logged in a dedicated channel. This logging feature helps maintain a clear record of actions taken by moderators for accountability and transparency.
 
 ## License
 

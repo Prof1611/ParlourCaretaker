@@ -16,51 +16,72 @@ class DMModal(discord.ui.Modal, title="Send a Direct Message"):
         super().__init__()
         self.bot = bot
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        logging.info(f"\033[35mDM\033[0m cog synced successfully.")
-
     async def on_submit(self, interaction: discord.Interaction):
         user_input_value = self.user_input.value.strip()
         message_value = self.message_input.value
 
-        # Try to fetch or locate the user
+        # Try to fetch or locate the user from the guild.
+        if not interaction.guild:
+            embed = discord.Embed(
+                title="Error",
+                description="This command must be used in a server.",
+                color=discord.Color.red(),
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
         member = None
         if user_input_value.isdigit():
             member = interaction.guild.get_member(int(user_input_value))
             if not member:
-                member = await self.bot.fetch_user(int(user_input_value))
+                try:
+                    member = await self.bot.fetch_user(int(user_input_value))
+                except Exception as e:
+                    logging.error(f"Error fetching user by ID: {e}")
         else:
             member = discord.utils.get(interaction.guild.members, name=user_input_value)
 
         if not member:
-            logging.error(f"User not found.")
+            logging.error("User not found.")
             embed = discord.Embed(
                 title="Error",
-                description=f"User not found.",
+                description="User not found.",
                 color=discord.Color.red(),
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
 
         # Send the DM
         try:
             await member.send(content=message_value)
-            logging.info(f"Direct message successfully sent to '{member.mention}'.")
+            logging.info(f"Direct message successfully sent to '{member.name}'.")
             embed = discord.Embed(
                 title="DM Sent",
                 description=f"Direct message successfully sent to {member.mention}!",
                 color=discord.Color.green(),
             )
-            await interaction.followup.send(embed=embed)
-
         except discord.Forbidden as e:
             logging.error(f"Could not send a direct message (forbidden). Error: {e}")
             embed = discord.Embed(
                 title="Error",
-                description=f"Failed to send the direct message.",
+                description="Failed to send the direct message (forbidden).",
                 color=discord.Color.red(),
             )
+        except Exception as e:
+            logging.error(f"Unexpected error while sending DM: {e}")
+            embed = discord.Embed(
+                title="Error",
+                description="An unexpected error occurred while sending the DM.",
+                color=discord.Color.red(),
+            )
+
+        # Respond to the interaction.
+        # Use interaction.response.send_message if not already responded to,
+        # otherwise use followup.send.
+        if not interaction.response.is_done():
             await interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await interaction.followup.send(embed=embed)
 
 
 class Dm(commands.Cog):
@@ -73,6 +94,10 @@ class Dm(commands.Cog):
     async def dm_command(self, interaction: discord.Interaction):
         modal = DMModal(self.bot)
         await interaction.response.send_modal(modal)
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        logging.info("\033[35mDM\033[0m cog synced successfully.")
 
 
 async def setup(bot: commands.Bot):
