@@ -117,10 +117,6 @@ class Sticky(commands.Cog):
         self.load_stickies()
         self.initialised = False  # Guard flag to prevent multiple on_ready executions
 
-        # Removing cooldown-related attributes.
-        # self.last_update = {}
-        # self.update_cooldown = 3
-
         # For ensuring only one sticky update per channel at a time.
         self.locks = {}  # channel_id: asyncio.Lock
 
@@ -157,7 +153,7 @@ class Sticky(commands.Cog):
     ):
         """Centralised logic for updating a sticky message in a channel.
 
-        The force_update parameter is used on startup to bypass any checks.
+        The force_update parameter is used on startup or on resume to bypass checks.
         """
         # Check that the channel is a text channel.
         if not isinstance(channel, discord.TextChannel):
@@ -173,8 +169,6 @@ class Sticky(commands.Cog):
                 f"Insufficient permissions in channel #{channel.name}. Skipping sticky update."
             )
             return
-
-        # Removing throttle checks entirely.
 
         # Use a per-channel lock to avoid concurrent updates.
         lock = self.locks.setdefault(channel.id, asyncio.Lock())
@@ -206,12 +200,22 @@ class Sticky(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         # Prevent reinitialisation on reconnection.
-        if self.initialised:
-            return
-        self.initialised = True
-        logging.info("Sticky cog synced successfully.")
+        if not self.initialised:
+            self.initialised = True
+            logging.info("\033[35mSticky\033[0m cog synced successfully.")
 
-        # On startup, for each channel with a sticky, force-update the sticky.
+            # On startup, for each channel with a sticky, force-update the sticky.
+            for channel_id, sticky in list(self.stickies.items()):
+                channel = self.bot.get_channel(int(channel_id))
+                if channel:
+                    await self.update_sticky_for_channel(
+                        channel, sticky, force_update=True
+                    )
+
+    @commands.Cog.listener()
+    async def on_resumed(self):
+        # This listener is triggered when the bot resumes after a disconnect.
+        logging.info("Bot resumed. Updating sticky messages in all channels.")
         for channel_id, sticky in list(self.stickies.items()):
             channel = self.bot.get_channel(int(channel_id))
             if channel:
