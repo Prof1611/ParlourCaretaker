@@ -155,9 +155,8 @@ class Sticky(commands.Cog):
     async def update_sticky_for_channel(
         self, channel: discord.abc.Messageable, sticky: dict, force_update: bool = False
     ):
-        """Centralised logic for updating a sticky message in a channel.
-
-        The force_update parameter is used on startup or on resume to bypass checks.
+        """
+        Update the sticky message in the channel only if the stored sticky is not the latest message.
         """
         # Check that the channel is a text channel.
         if not isinstance(channel, discord.TextChannel):
@@ -177,6 +176,14 @@ class Sticky(commands.Cog):
         # Use a per-channel lock to avoid concurrent updates.
         lock = self.locks.setdefault(channel.id, asyncio.Lock())
         async with lock:
+            # Fetch the latest message in the channel.
+            history = [msg async for msg in channel.history(limit=1)]
+            if history and not force_update:
+                last_message = history[0]
+                # Check if the last message is our stored sticky message.
+                if last_message.id == sticky["message_id"]:
+                    return
+
             try:
                 # Attempt to delete the previous sticky message.
                 try:
@@ -203,25 +210,25 @@ class Sticky(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        # Remove any guard preventing updates.
-        self.initialised = False
+        # On startup, update sticky messages only if needed.
         logging.info("\033[35mSticky\033[0m cog syncing on_ready.")
-        # On startup, force-update sticky messages for each channel.
         for channel_id, sticky in list(self.stickies.items()):
             channel = self.bot.get_channel(int(channel_id))
             if channel:
-                await self.update_sticky_for_channel(channel, sticky, force_update=True)
+                await self.update_sticky_for_channel(
+                    channel, sticky, force_update=False
+                )
         self.initialised = True
 
     @commands.Cog.listener()
     async def on_resumed(self):
         logging.info("Bot resumed. Updating sticky messages in all channels.")
-        # Reset the flag to allow updates on resume.
-        self.initialised = False
         for channel_id, sticky in list(self.stickies.items()):
             channel = self.bot.get_channel(int(channel_id))
             if channel:
-                await self.update_sticky_for_channel(channel, sticky, force_update=True)
+                await self.update_sticky_for_channel(
+                    channel, sticky, force_update=False
+                )
         self.initialised = True
 
     async def _send_sticky(self, channel: discord.TextChannel, content: str, fmt: str):
@@ -307,7 +314,7 @@ class Sticky(commands.Cog):
     async def _debounced_update(self, channel: discord.abc.Messageable, sticky: dict):
         try:
             await asyncio.sleep(self.debounce_interval)
-            await self.update_sticky_for_channel(channel, sticky)
+            await self.update_sticky_for_channel(channel, sticky, force_update=False)
         finally:
             self.debounce_tasks.pop(channel.id, None)
 

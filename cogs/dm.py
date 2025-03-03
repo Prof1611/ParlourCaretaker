@@ -20,16 +20,28 @@ class DMModal(discord.ui.Modal, title="Send a Direct Message"):
         user_input_value = self.user_input.value.strip()
         message_value = self.message_input.value
 
-        # Try to fetch or locate the user from the guild.
+        # Create a processing embed and send it.
+        processing_embed = discord.Embed(
+            title="Processing DM",
+            description="Please wait...",
+            color=discord.Color.orange(),
+        )
+        await interaction.response.send_message(embed=processing_embed, ephemeral=True)
+        original_response = await interaction.original_response()
+
+        # Check that the command is used in a guild.
         if not interaction.guild:
             embed = discord.Embed(
                 title="Error",
                 description="This command must be used in a server.",
                 color=discord.Color.red(),
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.followup.edit_message(
+                message_id=original_response.id, content="", embed=embed
+            )
             return
 
+        # Locate the user.
         member = None
         if user_input_value.isdigit():
             member = interaction.guild.get_member(int(user_input_value))
@@ -48,10 +60,12 @@ class DMModal(discord.ui.Modal, title="Send a Direct Message"):
                 description="User not found.",
                 color=discord.Color.red(),
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.followup.edit_message(
+                message_id=original_response.id, content="", embed=embed
+            )
             return
 
-        # Send the DM
+        # Attempt to send the DM.
         try:
             await member.send(content=message_value)
             logging.info(f"Direct message successfully sent to '{member.name}'.")
@@ -75,13 +89,10 @@ class DMModal(discord.ui.Modal, title="Send a Direct Message"):
                 color=discord.Color.red(),
             )
 
-        # Respond to the interaction.
-        # Use interaction.response.send_message if not already responded to,
-        # otherwise use followup.send.
-        if not interaction.response.is_done():
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await interaction.followup.send(embed=embed)
+        # Edit the original processing embed with the final embed.
+        await interaction.followup.edit_message(
+            message_id=original_response.id, content="", embed=embed
+        )
 
 
 class Dm(commands.Cog):
