@@ -15,7 +15,7 @@ class GamesNight(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info(f"\033[35mGamesnight\033[0m cog synced successfully.")
+        logging.info(f"\033[35mGamesNight\033[0m cog synced successfully.")
 
     @app_commands.command(name="gamesnight", description="Sends a games night announcement in #parlour-games")
     async def message(self, interaction: discord.Interaction, *, message: str):

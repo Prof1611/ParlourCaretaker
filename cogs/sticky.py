@@ -211,7 +211,7 @@ class Sticky(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         # On startup, update sticky messages only if needed.
-        logging.info("\033[35mSticky\033[0m cog syncing on_ready.")
+        logging.info("\033[35mSticky\033[0m cog synced successfully.")
         for channel_id, sticky in list(self.stickies.items()):
             channel = self.bot.get_channel(int(channel_id))
             if channel:

@@ -3,7 +3,7 @@ import logging
 from discord.ext import commands
 
 class AutoRole(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @commands.Cog.listener()
@@ -13,15 +13,24 @@ class AutoRole(commands.Cog):
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         role_id = 1151863422133227594  # Role ID to assign to new joiners
-        role = member.guild.get_role(role_id)
-        if not role:
-            logging.error(f"AutoRole: Role with ID {role_id} not found in guild '{member.guild.name}'.")
-            return
         try:
-            await member.add_roles(role)
-            logging.info(f"AutoRole: Assigned role '{role.name}' to new member '{member.name}'.")
-        except discord.HTTPException as e:
-            logging.error(f"AutoRole: Failed to assign role to '{member.name}'. Error: {e}")
+            role = member.guild.get_role(role_id)
+            if not role:
+                logging.error(f"Role with ID {role_id} not found in guild '{member.guild.name}'.")
+                return
+        except Exception as e:
+            logging.error(f"Error retrieving role with ID {role_id} in guild '{member.guild.name}': {e}")
+            return
 
-async def setup(bot):
+        try:
+            await member.add_roles(role, reason="Auto-assigned role on join")
+            logging.info(f"Assigned role '{role.name}' to new member '{member.name}'.")
+        except discord.Forbidden:
+            logging.error(f"Forbidden error when assigning role to '{member.name}'. Check that the bot has Manage Roles permission and its role is high enough.")
+        except discord.HTTPException as http_e:
+            logging.error(f"HTTP error occurred while assigning role to '{member.name}': {http_e}")
+        except Exception as e:
+            logging.error(f"Unexpected error when assigning role to '{member.name}': {e}")
+
+async def setup(bot: commands.Bot):
     await bot.add_cog(AutoRole(bot))
