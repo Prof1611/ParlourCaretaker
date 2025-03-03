@@ -25,7 +25,7 @@ Checks the band’s website for new shows and updates a specified channel with t
 - `/tempban [user] [duration] [reason]` Temporarily bans a user and sends them a DM with the reason and duration.
 - `/kick [user] [reason]` Kicks a user and sends them a DM with the reason.
 - `/dm [user] [message]` Sends a custom direct message to a specified user.
-- `/message [channel] [message]` Posts a custom message in a designated channel.
+- `/message` Posts a custom message in a chosen channel.
 - `/gamesnight [message]` Sends a games night announcement in the #parlour-games channel.
 - `/scrape` Checks the band’s website for new shows and updates the #gig-chats channel.
 - `/setsticky` Sets a sticky message in the current channel that remains at the bottom.
