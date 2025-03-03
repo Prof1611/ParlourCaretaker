@@ -1,27 +1,54 @@
+# ==========================
 # The Parlour Caretaker Configuration - The Parlour Dev Server
-logs_channel_id: 1237165394649682003 # Channel ID where moderation actions are logged
-owner_ids: # User IDs of the bot owners
-  - 411589337369804801
-  - 398205938265358339
-dm_forward_channel_id: 1161423690517463164 # Channel ID for forwarding DMs
-games_channel_id: 1281260171754082430 # Channel ID for sending games night announcements
-gigchats_id: 1302737683537334332 # Channel ID for gig chats forum channel
+# ==========================
 
+# --------------------------
+# General Settings
+# --------------------------
+# List the user IDs of the bot owners.
+owner_ids:
+  - 411589337369804801   # Jay
+  - 398205938265358339   # Harry
+
+# Status messages to rotate through for the bot's presence.
 statuses:
- - "Prelude to Ecstasy 🏹"
- - "Burn Alive 🏹"
- - "Caesar on a TV Screen 🏹"
- - "The Feminine Urge 🏹"
- - "On Your Side 🏹"
- - "Beautiful Boy 🏹"
- - "Gjuha 🏹"
- - "Sinner 🏹"
- - "My Lady of Mercy 🏹"
- - "Portrait of a Dead Girl 🏹"
- - "Nothing Matters 🏹"
- - "Mirror 🏹"
- - "Godzilla 🦎"
- - "Big Dog 🐕"
- - "Second Best 🥈"
- - "The Killer 🔪"
- - "Yeehaw Interlude 🤠"
+  - "Prelude to Ecstasy 🏹"
+  - "Burn Alive 🏹"
+  - "Caesar on a TV Screen 🏹"
+  - "The Feminine Urge 🏹"
+  - "On Your Side 🏹"
+  - "Beautiful Boy 🏹"
+  - "Gjuha 🏹"
+  - "Sinner 🏹"
+  - "My Lady of Mercy 🏹"
+  - "Portrait of a Dead Girl 🏹"
+  - "Nothing Matters 🏹"
+  - "Mirror 🏹"
+  - "Godzilla 🦎"
+  - "Big Dog 🐕"
+  - "Second Best 🥈"
+  - "The Killer 🔪"
+  - "Yeehaw Interlude 🤠"
+
+# --------------------------
+# Channel IDs
+# --------------------------
+# These are the channels used by the bot for various functions.
+logs_channel_id: 1237165394649682003    # Channel where moderation actions are logged.
+dm_forward_channel_id: 1161423690517463164  # Channel for forwarding direct messages.
+games_channel_id: 1281260171754082430     # Channel for sending games night announcements.
+gigchats_id: 1302737683537334332           # Channel for gig chats forum.
+welcome_channel_id: 1346179245923106907    # Channel where welcome messages are posted.
+
+# --------------------------
+# Role Settings
+# --------------------------
+# Role to assign automatically to new joiners.
+newjoin_role_id: 1346184212872433755       # Role ID to assign to new joiners.
+
+# --------------------------
+# Feature Toggles
+# --------------------------
+# Enable or disable specific features. Set to 'true' to enable the feature.
+welcome_enabled: true    # Set to true to enable welcome messages.
+autorole_enabled: true   # Set to true to enable auto role assignment.
