@@ -53,7 +53,7 @@ class Welcome(commands.Cog):
                 ),
             )
             logging.info(
-                f"Welcome embed sent for '{member.name}' in '#{channel.name}'."
+                f"Welcome embed sent for '@{member.name}' in '#{channel.name}'."
             )
         except discord.HTTPException as e:
             logging.error(f"Error sending welcome embed in '#{channel.name}': {e}")

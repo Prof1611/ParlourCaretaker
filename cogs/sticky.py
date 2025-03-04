@@ -5,8 +5,9 @@ import asyncio
 from discord import app_commands
 from discord.ext import commands
 
-
 # --- Dropdown (Select) and View to choose sticky format ---
+
+
 class StickyFormatSelect(discord.ui.Select):
     def __init__(self):
         options = [
@@ -29,9 +30,6 @@ class StickyFormatSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        logging.debug(
-            f"StickyFormatSelect callback triggered with value: {self.values[0]}"
-        )
         # Store the selected format in the view and open the modal.
         self.view.selected_format = self.values[0]
         await interaction.response.send_modal(
@@ -65,7 +63,6 @@ class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
         self.selected_format = selected_format
 
     async def on_submit(self, interaction: discord.Interaction):
-        logging.debug("StickyModal submitted")
         content = self.sticky_message.value
         channel = interaction.channel
 
@@ -73,19 +70,8 @@ class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
         if channel.id in self.sticky_cog.stickies:
             previous_sticky = self.sticky_cog.stickies[channel.id]
             try:
-                logging.debug(
-                    f"Found existing sticky in channel {channel.id}, attempting to delete."
-                )
                 old_message = await channel.fetch_message(previous_sticky["message_id"])
-                # Check if the message is the latest
-                history = [msg async for msg in channel.history(limit=1)]
-                if history and history[0].id == previous_sticky["message_id"]:
-                    logging.debug(
-                        f"Sticky message is already the latest in #{channel.name}, skipping update."
-                    )
-                    return
                 await old_message.delete()
-                logging.debug("Old sticky message deleted.")
             except discord.NotFound:
                 logging.warning(f"Old sticky not found in #{channel}.")
             except Exception as e:
@@ -99,10 +85,8 @@ class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
                     color=discord.Color.blurple(),
                 )
                 sticky_msg = await channel.send(embed=embed)
-                logging.debug("Sent sticky as embed.")
             else:
                 sticky_msg = await channel.send(content)
-                logging.debug("Sent sticky as plain text.")
 
             # Store the sticky details (content, message ID, and format).
             self.sticky_cog.stickies[channel.id] = {
@@ -111,8 +95,8 @@ class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
                 "format": self.selected_format,
             }
             self.sticky_cog.save_stickies()
-            logging.info(f"Sticky message successfully set in #{channel}")
 
+            logging.info(f"Sticky message successfully set in #{channel}")
             embed = discord.Embed(
                 title="Sticky Message Set",
                 description=f"Sticky message successfully set in #{channel}!",
@@ -145,14 +129,10 @@ class Sticky(commands.Cog):
         try:
             with open("stickies.json", "r") as f:
                 self.stickies = json.load(f)
-                logging.debug("Loaded stickies from file.")
                 if not self.stickies:
                     self.stickies = {}
                     self.save_stickies()
         except (FileNotFoundError, json.JSONDecodeError):
-            logging.warning(
-                "No valid stickies file found. Starting with empty stickies."
-            )
             self.stickies = {}
             self.save_stickies()
 
@@ -169,7 +149,6 @@ class Sticky(commands.Cog):
         try:
             with open("stickies.json", "w") as f:
                 json.dump(saved_stickies, f, indent=4)
-            logging.debug("Stickies saved to file.")
         except Exception as e:
             logging.error(f"Failed to save stickies to file: {e}")
 
@@ -179,9 +158,6 @@ class Sticky(commands.Cog):
         """
         Update the sticky message in the channel only if the stored sticky is not the latest message.
         """
-        logging.debug(
-            f"Attempting to update sticky for channel {channel.name} (ID: {channel.id})."
-        )
         # Check that the channel is a text channel.
         if not isinstance(channel, discord.TextChannel):
             logging.warning(
@@ -200,26 +176,19 @@ class Sticky(commands.Cog):
         # Use a per-channel lock to avoid concurrent updates.
         lock = self.locks.setdefault(channel.id, asyncio.Lock())
         async with lock:
-            logging.debug("Acquired lock for updating sticky.")
             # Fetch the latest message in the channel.
             history = [msg async for msg in channel.history(limit=1)]
-            logging.debug("Fetched channel history for last message.")
             if history and not force_update:
                 last_message = history[0]
                 # Check if the last message is our stored sticky message.
                 if last_message.id == sticky["message_id"]:
-                    logging.debug(
-                        f"Sticky message is already the latest in #{channel.name}, skipping update."
-                    )
                     return
 
             try:
                 # Attempt to delete the previous sticky message.
                 try:
-                    logging.debug("Attempting to delete previous sticky message.")
                     old_message = await channel.fetch_message(sticky["message_id"])
                     await old_message.delete()
-                    logging.debug("Previous sticky message deleted.")
                 except discord.NotFound:
                     logging.warning(f"Old sticky not found in channel #{channel.name}.")
                 except Exception as e:
@@ -229,7 +198,6 @@ class Sticky(commands.Cog):
 
                 # Send a new sticky message.
                 fmt = sticky.get("format", "normal")
-                logging.debug(f"Sending new sticky message using format: {fmt}.")
                 new_sticky = await self._send_sticky(channel, sticky["content"], fmt)
                 self.stickies[channel.id] = {
                     "content": sticky["content"],
@@ -237,19 +205,16 @@ class Sticky(commands.Cog):
                     "format": fmt,
                 }
                 self.save_stickies()
-                logging.debug(
-                    f"Sticky message updated in #{channel.name} (new message ID: {new_sticky.id})."
-                )
             except Exception as e:
                 logging.error(f"Error updating sticky in channel #{channel.name}: {e}")
 
     @commands.Cog.listener()
     async def on_ready(self):
+        # On startup, update sticky messages only if needed.
         logging.info("\033[35mSticky\033[0m cog synced successfully.")
         for channel_id, sticky in list(self.stickies.items()):
             channel = self.bot.get_channel(int(channel_id))
             if channel:
-                logging.debug(f"Updating sticky for channel ID: {channel_id} on_ready.")
                 await self.update_sticky_for_channel(
                     channel, sticky, force_update=False
                 )
@@ -257,13 +222,10 @@ class Sticky(commands.Cog):
 
     @commands.Cog.listener()
     async def on_resumed(self):
-        logging.debug("Bot resumed. Updating sticky messages in all channels.")
+        logging.info("Bot resumed. Updating sticky messages in all channels.")
         for channel_id, sticky in list(self.stickies.items()):
             channel = self.bot.get_channel(int(channel_id))
             if channel:
-                logging.debug(
-                    f"Updating sticky for channel ID: {channel_id} on_resumed."
-                )
                 await self.update_sticky_for_channel(
                     channel, sticky, force_update=False
                 )
@@ -287,7 +249,6 @@ class Sticky(commands.Cog):
     )
     async def set_sticky(self, interaction: discord.Interaction):
         """Open a modal form to set the sticky message for the current channel."""
-        logging.debug("set_sticky command invoked.")
         view = StickyFormatView(self)
         await interaction.response.send_message(
             "Choose the sticky message format:", view=view, ephemeral=True
@@ -299,11 +260,9 @@ class Sticky(commands.Cog):
     )
     async def remove_sticky(self, interaction: discord.Interaction):
         """Remove the sticky message for the current channel."""
-        logging.debug("removesticky command invoked.")
         await interaction.response.defer()
         channel = interaction.channel
         if channel.id not in self.stickies:
-            logging.debug(f"No sticky message set in channel #{channel.name}.")
             embed = discord.Embed(
                 title="No Sticky Message",
                 description=f"There is no sticky message set in #{channel}.",
@@ -316,10 +275,8 @@ class Sticky(commands.Cog):
 
         sticky = self.stickies[channel.id]
         try:
-            logging.debug("Attempting to delete sticky message for removal.")
             old_message = await channel.fetch_message(sticky["message_id"])
             await old_message.delete()
-            logging.debug("Sticky message deleted for removal.")
         except discord.NotFound:
             logging.warning(
                 f"Sticky message not found in channel {channel.name} during removal."
@@ -342,43 +299,29 @@ class Sticky(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         """Ensure the sticky message stays as the latest message in the channel."""
-        # Debug log at the start of the event.
-        logging.debug(
-            f"on_message triggered in channel {message.channel.id} by {message.author}."
-        )
         if message.author == self.bot.user:
-            logging.debug("Message author is bot; ignoring.")
             return
 
         channel = message.channel
         if channel.id in self.stickies:
-            logging.debug(
-                f"Channel {channel.id} has a sticky registered. Scheduling debounce update."
-            )
             # Instead of updating immediately, debounce the update.
             if channel.id in self.debounce_tasks:
-                logging.debug("Debounce task already scheduled; skipping new task.")
                 return
             self.debounce_tasks[channel.id] = self.bot.loop.create_task(
                 self._debounced_update(channel, self.stickies[channel.id])
             )
 
     async def _debounced_update(self, channel: discord.abc.Messageable, sticky: dict):
-        logging.debug(
-            f"Debounced update scheduled for channel {channel.id}. Waiting {self.debounce_interval} seconds."
-        )
         try:
             await asyncio.sleep(self.debounce_interval)
-            logging.debug("Debounce interval elapsed; updating sticky.")
             await self.update_sticky_for_channel(channel, sticky, force_update=False)
         finally:
-            logging.debug(f"Clearing debounce task for channel {channel.id}.")
             self.debounce_tasks.pop(channel.id, None)
 
     async def handle_error(self, e, channel, interaction):
         """Handle error cases and send an appropriate response."""
-        logging.error(f"Handling error in channel {channel}: {e}")
         if e.status == 403:
+            logging.error(f"No access to #{channel}. Error: {e}")
             embed = discord.Embed(
                 title="Error",
                 description=f"I don't have access to #{channel}!",
@@ -386,6 +329,7 @@ class Sticky(commands.Cog):
             )
             await interaction.followup.send(embed=embed)
         elif e.status == 404:
+            logging.error(f"Channel not found. Error: {e}")
             embed = discord.Embed(
                 title="Error",
                 description="Channel not found!",
@@ -393,6 +337,7 @@ class Sticky(commands.Cog):
             )
             await interaction.followup.send(embed=embed)
         elif e.status == 429:
+            logging.error(f"RATE LIMIT. Error: {e}")
             embed = discord.Embed(
                 title="Error",
                 description="Too many requests! Please try later.",
@@ -400,6 +345,7 @@ class Sticky(commands.Cog):
             )
             await interaction.followup.send(embed=embed)
         elif e.status in {500, 502, 503, 504}:
+            logging.error(f"Discord API Error. Error: {e}")
             embed = discord.Embed(
                 title="Error",
                 description=f"Failed to set sticky message in #{channel}. Please try later.",
@@ -407,6 +353,9 @@ class Sticky(commands.Cog):
             )
             await interaction.followup.send(embed=embed)
         else:
+            logging.error(
+                f"Error when attempting to set sticky message in #{channel}. Error: {e}"
+            )
             embed = discord.Embed(
                 title="Error",
                 description=f"Failed to set sticky message in #{channel}.",
