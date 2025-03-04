@@ -80,7 +80,7 @@ class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
                 # Check if the message is the latest
                 history = [msg async for msg in channel.history(limit=1)]
                 if history and history[0].id == previous_sticky["message_id"]:
-                    logging.info(
+                    logging.debug(
                         f"Sticky message is already the latest in #{channel.name}, skipping update."
                     )
                     return
@@ -208,7 +208,7 @@ class Sticky(commands.Cog):
                 last_message = history[0]
                 # Check if the last message is our stored sticky message.
                 if last_message.id == sticky["message_id"]:
-                    logging.info(
+                    logging.debug(
                         f"Sticky message is already the latest in #{channel.name}, skipping update."
                     )
                     return
@@ -237,7 +237,7 @@ class Sticky(commands.Cog):
                     "format": fmt,
                 }
                 self.save_stickies()
-                logging.info(
+                logging.debug(
                     f"Sticky message updated in #{channel.name} (new message ID: {new_sticky.id})."
                 )
             except Exception as e:
@@ -257,7 +257,7 @@ class Sticky(commands.Cog):
 
     @commands.Cog.listener()
     async def on_resumed(self):
-        logging.info("Bot resumed. Updating sticky messages in all channels.")
+        logging.debug("Bot resumed. Updating sticky messages in all channels.")
         for channel_id, sticky in list(self.stickies.items()):
             channel = self.bot.get_channel(int(channel_id))
             if channel:
