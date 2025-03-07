@@ -14,7 +14,7 @@ class Restart(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info(f"\033[35mRestart\033[0m cog synced successfully.")
+        logging.info(f"\033[96mRestart\033[0m cog synced successfully.")
 
     @app_commands.command(name="restart", description="Restarts the bot.")
     async def restart(self, interaction: discord.Interaction):

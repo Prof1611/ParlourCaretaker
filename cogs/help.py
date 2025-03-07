@@ -10,7 +10,7 @@ class Help(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info(f"\033[35mHelp\033[0m cog synced successfully.")
+        logging.info(f"\033[96mHelp\033[0m cog synced successfully.")
 
     @app_commands.command(name="help", description="Sends a list of all commands.")
     async def message(self, interaction: discord.Interaction):

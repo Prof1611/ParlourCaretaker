@@ -108,7 +108,7 @@ class Dm(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info("\033[35mDM\033[0m cog synced successfully.")
+        logging.info("\033[96mDM\033[0m cog synced successfully.")
 
 
 async def setup(bot: commands.Bot):

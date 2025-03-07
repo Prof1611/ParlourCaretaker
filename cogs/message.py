@@ -126,7 +126,7 @@ class Message(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info("\033[35mMessage\033[0m cog synced successfully.")
+        logging.info("\033[96mMessage\033[0m cog synced successfully.")
 
 
 async def setup(bot: commands.Bot):

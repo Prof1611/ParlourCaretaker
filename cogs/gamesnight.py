@@ -127,7 +127,7 @@ class GamesNight(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info(f"\033[35mGamesNight\033[0m cog synced successfully.")
+        logging.info(f"\033[96mGamesNight\033[0m cog synced successfully.")
 
     @app_commands.command(
         name="gamesnight",

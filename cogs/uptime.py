@@ -11,7 +11,7 @@ class Uptime(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info(f"\033[35mUptime\033[0m cog synced successfully.")
+        logging.info(f"\033[96mUptime\033[0m cog synced successfully.")
 
     @app_commands.command(name="uptime", description="Shows how long the bot has been running.")
     async def uptime(self, interaction: discord.Interaction):

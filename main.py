@@ -77,7 +77,7 @@ async def change_bot_status():
 
 @bot.event
 async def on_ready():
-    logging.info(f"Successfully logged in as \033[35m{bot.user}\033[0m")
+    logging.info(f"Successfully logged in as \033[96m{bot.user}\033[0m")
 
     # Start the status rotation if not already running
     if not change_bot_status.is_running():
@@ -114,7 +114,7 @@ async def on_message(message):
                 )
                 await target_channel.send(embed=embed)
                 logging.info(
-                    f"DM from \033[35m{message.author}\033[0m forwarded to \033[35m#{target_channel.name}\033[0m"
+                    f"DM from {message.author} forwarded to #{target_channel.name}"
                 )
             except discord.HTTPException as e:
                 logging.error(f"Error forwarding DM: {e}")

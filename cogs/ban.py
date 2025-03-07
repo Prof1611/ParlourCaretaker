@@ -16,7 +16,7 @@ class Ban(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info(f"\033[35mBan\033[0m cog synced successfully.")
+        logging.info(f"\033[96mBan\033[0m cog synced successfully.")
 
     @app_commands.command(name="ban", description="Bans a member and sends them a notice via DM.")
     async def ban(self, interaction: discord.Interaction, member: discord.Member, *, reason: str):

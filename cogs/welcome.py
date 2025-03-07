@@ -18,7 +18,7 @@ class Welcome(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info(f"\033[35mWelcome\033[0m cog synced successfully.")
+        logging.info(f"\033[96mWelcome\033[0m cog synced successfully.")
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
