@@ -6,6 +6,10 @@ import os
 import yaml
 import asyncio
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 # Define ANSI escape sequences for colours
@@ -42,9 +46,10 @@ logging.basicConfig(level=logging.INFO, handlers=[handler])
 with open("config.yaml", "r", encoding="utf-8") as config_file:
     config = yaml.safe_load(config_file)
 
-BOT_TOKEN = os.environ.get("TOKEN", None)
+# Retrieve the bot token from the .env file
+BOT_TOKEN = os.environ.get("TOKEN")
 if BOT_TOKEN is None:
-    logging.error("Bot token not found in environment variable 'TOKEN'. Please set it!")
+    logging.error("Bot token not found in .env file. Please set TOKEN!")
     exit(1)
 
 intents = discord.Intents.all()
@@ -98,9 +103,7 @@ async def on_message(message):
     # Check if this is a DM
     if isinstance(message.channel, discord.DMChannel):
         # Directly use the stored dm_forward_channel_id
-        target_channel = bot.get_channel(
-            dm_forward_channel_id
-        )  # Use bot.get_channel instead of accessing a guild
+        target_channel = bot.get_channel(dm_forward_channel_id)
 
         if target_channel:
             try:

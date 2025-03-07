@@ -1,3 +1,4 @@
 cogs/__pycache__/
 stickies.json
 bans.json
+.env
