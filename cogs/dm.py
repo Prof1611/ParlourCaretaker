@@ -5,19 +5,16 @@ from discord import app_commands
 
 
 class DMModal(discord.ui.Modal, title="Send a Direct Message"):
-    user_input = discord.ui.TextInput(
-        label="Username or User ID", style=discord.TextStyle.short, required=True
-    )
     message_input = discord.ui.TextInput(
         label="Message", style=discord.TextStyle.long, required=True
     )
 
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: commands.Bot, user: discord.User):
         super().__init__()
         self.bot = bot
+        self.user = user
 
     async def on_submit(self, interaction: discord.Interaction):
-        user_input_value = self.user_input.value.strip()
         message_value = self.message_input.value
 
         # Create a processing embed and send it.
@@ -29,49 +26,13 @@ class DMModal(discord.ui.Modal, title="Send a Direct Message"):
         await interaction.response.send_message(embed=processing_embed, ephemeral=True)
         original_response = await interaction.original_response()
 
-        # Check that the command is used in a guild.
-        if not interaction.guild:
-            embed = discord.Embed(
-                title="Error",
-                description="This command must be used in a server.",
-                color=discord.Color.red(),
-            )
-            await interaction.followup.edit_message(
-                message_id=original_response.id, content="", embed=embed
-            )
-            return
-
-        # Locate the user.
-        member = None
-        if user_input_value.isdigit():
-            member = interaction.guild.get_member(int(user_input_value))
-            if not member:
-                try:
-                    member = await self.bot.fetch_user(int(user_input_value))
-                except Exception as e:
-                    logging.error(f"Error fetching user by ID: {e}")
-        else:
-            member = discord.utils.get(interaction.guild.members, name=user_input_value)
-
-        if not member:
-            logging.error("User not found.")
-            embed = discord.Embed(
-                title="Error",
-                description="User not found.",
-                color=discord.Color.red(),
-            )
-            await interaction.followup.edit_message(
-                message_id=original_response.id, content="", embed=embed
-            )
-            return
-
         # Attempt to send the DM.
         try:
-            await member.send(content=message_value)
-            logging.info(f"Direct message successfully sent to '{member.name}'.")
+            await self.user.send(content=message_value)
+            logging.info(f"Direct message successfully sent to '{self.user.name}'.")
             embed = discord.Embed(
                 title="DM Sent",
-                description=f"Direct message successfully sent to {member.mention}!",
+                description=f"Direct message successfully sent to {self.user.mention}!",
                 color=discord.Color.green(),
             )
         except discord.Forbidden as e:
@@ -102,8 +63,9 @@ class Dm(commands.Cog):
     @app_commands.command(
         name="dm", description="Send a custom direct message to a user."
     )
-    async def dm_command(self, interaction: discord.Interaction):
-        modal = DMModal(self.bot)
+    @app_commands.describe(user="The user to send the DM to")
+    async def dm_command(self, interaction: discord.Interaction, user: discord.User):
+        modal = DMModal(self.bot, user)
         await interaction.response.send_modal(modal)
 
     @commands.Cog.listener()
