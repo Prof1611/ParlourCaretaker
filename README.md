@@ -19,8 +19,7 @@ Checks the band’s website for new shows and updates a specified channel with t
 ### Commands
 
 - `/help` Displays a list of available commands.
-- `/uptime` Displays how long the bot has been running.
-- `/restart` Restarts the bot.<br><br>
+- `/uptime` Displays how long the bot has been running.<br><br>
 - `/ban [user] [reason]` Permanently bans a user and sends them a DM with the reason.
 - `/tempban [user] [duration] [reason]` Temporarily bans a user and sends them a DM with the reason and duration.
 - `/kick [user] [reason]` Kicks a user and sends them a DM with the reason.
