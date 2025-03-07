@@ -176,21 +176,33 @@ class Sticky(commands.Cog):
         # Use a per-channel lock to avoid concurrent updates.
         lock = self.locks.setdefault(channel.id, asyncio.Lock())
         async with lock:
-            # Fetch the latest message in the channel.
-            history = [msg async for msg in channel.history(limit=1)]
+            # Fetch the latest messages in the channel.
+            history = [msg async for msg in channel.history(limit=20)]
             if history and not force_update:
-                last_message = history[0]
-                # Check if the last message is our stored sticky message.
-                if last_message.id == sticky["message_id"]:
+                # Check if the stored sticky message exists in the fetched history.
+                sticky_found = any(msg.id == sticky["message_id"] for msg in history)
+                # If the sticky is found and is the last message, no update is required.
+                if sticky_found and history[0].id == sticky["message_id"]:
                     return
 
+                # Delete any duplicate sticky messages found in history (not the latest one).
+                for msg in history:
+                    if msg.id == sticky["message_id"] and msg != history[0]:
+                        try:
+                            await msg.delete()
+                        except Exception as e:
+                            logging.error(
+                                f"Error deleting duplicate sticky in #{channel}: {e}"
+                            )
+
             try:
-                # Attempt to delete the previous sticky message.
+                # Attempt to delete the previous sticky message (if still present).
                 try:
                     old_message = await channel.fetch_message(sticky["message_id"])
                     await old_message.delete()
                 except discord.NotFound:
-                    logging.warning(f"Old sticky not found in channel #{channel.name}.")
+                    # It's expected that the sticky might already be deleted.
+                    pass
                 except Exception as e:
                     logging.error(
                         f"Error deleting old sticky in channel #{channel.name}: {e}"
