@@ -29,32 +29,18 @@ The Parlour Caretaker is a custom Discord bot designed to assist with moderation
 
 ### Commands
 
-- **`/help`** – Displays a list of all available commands.
-- **`/uptime`** – Displays how long the bot has been running.
-- **`/restart`** – Restarts the bot.
-
-- **Moderation Commands:**  
-  - **`/ban [user] [reason]`** – Permanently bans a user and sends them a DM with the reason.
-  - **`/tempban [user] [duration] [reason]`** – Temporarily bans a user for a specified duration and sends them a DM with the reason.
-  - **`/kick [user] [reason]`** – Kicks a user and sends them a DM with the reason.
-  - **`/timeout [user] [duration] [reason]`** – Times out a member (disables their communication) for a specified duration and logs the action.
-
-- **Utility Commands:**  
-  - **`/dm [user] [message]`** – Sends a custom direct message to a specified user.
-  - **`/message`** – Posts a custom message in a chosen channel via a modal form.
-  - **`/setsticky`** – Sets a sticky message in the current channel that remains at the bottom.
-  - **`/removesticky`** – Removes the sticky message from the current channel.
-
-- **Games Night:**  
-  - **`/gamesnight [message]`** – Sends a games night announcement in a dedicated channel.
-
-- **Show Scraping:**  
-  - **`/scrape`** – Checks the band’s website for new shows and updates the events channel accordingly.
-
-- **Roulette Game:**  
-  - **`/roulette`** – Roll for your fate in the Nothing Matters Roulette game!
-  - **`/roulette_stats`** – Check your individual roulette game statistics.
-  - **`/roulette_leaderboard`** – Display the top 10 players in the roulette game.
+- `/help` Displays a list of available commands.
+- `/uptime` Displays how long the bot has been running.
+- `/restart` Restarts the bot.<br><br>
+- `/ban [user] [reason]` Permanently bans a user and sends them a DM with the reason.
+- `/tempban [user] [duration] [reason]` Temporarily bans a user and sends them a DM with the reason and duration.
+- `/kick [user] [reason]` Kicks a user and sends them a DM with the reason.
+- `/dm [user] [message]` Sends a custom direct message to a specified user.
+- `/message` Posts a custom message in a chosen channel.
+- `/gamesnight [message]` Sends a games night announcement in the #parlour-games channel.
+- `/scrape` Checks the band’s website for new shows and updates the #gig-chats channel.
+- `/setsticky` Sets a sticky message in the current channel that remains at the bottom.
+- `/removesticky` Removes the sticky message from the current channel.
 
 ### Logging & Audit Trails
 
