@@ -52,3 +52,26 @@ newjoin_role_id: 1151863422133227594           # Role ID to assign to new joiner
 # Enable or disable specific features. Set to 'true' to enable the feature.
 welcome_enabled: false     # Set to true to enable welcome messages.
 autorole_enabled: false    # Set to true to enable auto role assignment.
+
+# --------------------------
+# Roulette Fates
+# --------------------------
+roulette_fates:
+  winning:
+    - "You win! You are now the ultimate TLDP fan, crowned in baroque splendour! 🏹"
+    - "You win! You've been personally invited to an exclusive, candlelit dinner with the band. 🕯️"
+    - "You win! You find a secret, unreleased track hidden in an old vinyl pressing. 🎶"
+    - "You win! You're granted front-row seats for life at every TLDP concert. Nothing Matters, except this! 🍷"
+    - "You win! You are now the chosen one to carry the banner of baroque pop into the future. 🍒"
+  losing:
+    - "You lose! Your concert tickets vanish into thin air… ghosts of what could have been. 👻"
+    - "You lose! A rogue violinist curses you, and now all music you hear is slightly out of tune. 🎻"
+    - "You lose! You were about to meet the band, but you tripped on your cape and missed your chance. 🦇"
+    - "You lose! Your vinyl collection melts into candle wax. So poetic, yet so tragic. 🕯️"
+    - "You lose! You're exiled to a castle where no music exists, only the sound of distant waves. 🕊️"
+  mystery:
+    - "The bot stares at you. The bot blinks. The bot says… Try again? 🤷‍♂️"
+    - "A mysterious masked figure hands you a cryptic note. But what does it mean? 🎭"
+    - "Your fate is undecided… Come back at midnight and try again. ⏳"
+    - "You awaken in a grand ballroom. Music plays, but no one else is there… 🎸"
+    - "The spirit of music smiles upon you… but does not reveal its secrets. 🫀"

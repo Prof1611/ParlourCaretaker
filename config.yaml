@@ -1,5 +1,5 @@
 # ==========================
-# The Parlour Caretaker Configuration - The Parlour
+# The Parlour Caretaker Configuration - The Parlour Dev Server
 # ==========================
 
 # --------------------------
@@ -34,21 +34,44 @@ statuses:
 # Channel IDs
 # --------------------------
 # These are the channels used by the bot for various functions.
-logs_channel_id: 1220451817146683423         # Channel where moderation actions are logged.
-dm_forward_channel_id: 1239669255012614267    # Channel for forwarding direct messages.
-games_channel_id: 1159782202985426964         # Channel for sending games night announcements.
-gigchats_id: 1195097407604666399               # Channel for gig chats forum.
-welcome_channel_id: 1151864993571160135        # Channel where welcome messages are posted.
+logs_channel_id: 1237165394649682003    # Channel where moderation actions are logged.
+dm_forward_channel_id: 1161423690517463164  # Channel for forwarding direct messages.
+games_channel_id: 1281260171754082430     # Channel for sending games night announcements.
+gigchats_id: 1302737683537334332           # Channel for gig chats forum.
+welcome_channel_id: 1346179245923106907    # Channel where welcome messages are posted.
 
 # --------------------------
 # Role Settings
 # --------------------------
 # Role to assign automatically to new joiners.
-newjoin_role_id: 1151863422133227594           # Role ID to assign to new joiners.
+newjoin_role_id: 1346184212872433755       # Role ID to assign to new joiners.
 
 # --------------------------
 # Feature Toggles
 # --------------------------
 # Enable or disable specific features. Set to 'true' to enable the feature.
-welcome_enabled: false     # Set to true to enable welcome messages.
-autorole_enabled: false    # Set to true to enable auto role assignment.
+welcome_enabled: true    # Set to true to enable welcome messages.
+autorole_enabled: true   # Set to true to enable auto role assignment.
+
+# --------------------------
+# Roulette Fates
+# --------------------------
+roulette_fates:
+  winning:
+    - "You win! You are now the ultimate TLDP fan, crowned in baroque splendour! 🏹"
+    - "You win! You've been personally invited to an exclusive, candlelit dinner with the band. 🕯️"
+    - "You win! You find a secret, unreleased track hidden in an old vinyl pressing. 🎶"
+    - "You win! You're granted front-row seats for life at every TLDP concert. Nothing Matters, except this! 🍷"
+    - "You win! You are now the chosen one to carry the banner of baroque pop into the future. 🍒"
+  losing:
+    - "You lose! Your concert tickets vanish into thin air… ghosts of what could have been. 👻"
+    - "You lose! A rogue violinist curses you, and now all music you hear is slightly out of tune. 🎻"
+    - "You lose! You were about to meet the band, but you tripped on your cape and missed your chance. 🦇"
+    - "You lose! Your vinyl collection melts into candle wax. So poetic, yet so tragic. 🕯️"
+    - "You lose! You're exiled to a castle where no music exists, only the sound of distant waves. 🕊️"
+  mystery:
+    - "The bot stares at you. The bot blinks. The bot says… Try again? 🤷‍♂️"
+    - "A mysterious masked figure hands you a cryptic note. But what does it mean? 🎭"
+    - "Your fate is undecided… Come back at midnight and try again. ⏳"
+    - "You awaken in a grand ballroom. Music plays, but no one else is there… 🎸"
+    - "The spirit of music smiles upon you… but does not reveal its secrets. 🫀"

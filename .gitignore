@@ -1,4 +1,4 @@
 cogs/__pycache__/
-stickies.json
-bans.json
 .env
+database.db
+audit.log

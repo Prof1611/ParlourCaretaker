@@ -3,6 +3,14 @@ import logging
 from discord import app_commands
 from discord.ext import commands
 import asyncio
+import datetime
+
+
+def audit_log(message: str):
+    """Append a timestamped message to the audit log file."""
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open("audit.log", "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {message}\n")
 
 
 # --- Dropdown (Select) and View to choose message format ---
@@ -34,6 +42,9 @@ class MessageFormatSelect(discord.ui.Select):
             MessageModal(
                 interaction.client, self.view.target_channel, self.view.selected_format
             )
+        )
+        audit_log(
+            f"{interaction.user.name} (ID: {interaction.user.id}) selected message format '{self.values[0]}' for channel #{self.view.target_channel.name} (ID: {self.view.target_channel.id})."
         )
 
 
@@ -112,6 +123,9 @@ class MessageModal(discord.ui.Modal, title="Send a Custom Message"):
             await interaction.followup.edit_message(
                 message_id=original_response.id, content="", embed=error_embed
             )
+            audit_log(
+                f"{interaction.user.name} (ID: {interaction.user.id}) failed to send custom message: target channel not found."
+            )
             return
 
         # Attempt to send the custom message.
@@ -123,9 +137,14 @@ class MessageModal(discord.ui.Modal, title="Send a Custom Message"):
                     color=discord.Color.blurple(),
                 )
                 await self.target_channel.send(embed=embed)
+                audit_log(
+                    f"{interaction.user.name} (ID: {interaction.user.id}) sent custom embed message in channel #{self.target_channel.name} (ID: {self.target_channel.id}) with title '{embed_title}'."
+                )
             else:
                 await self.target_channel.send(message_value)
-
+                audit_log(
+                    f"{interaction.user.name} (ID: {interaction.user.id}) sent custom normal message in channel #{self.target_channel.name} (ID: {self.target_channel.id})."
+                )
             logging.info(
                 f"Custom message successfully sent in #{self.target_channel.name}."
             )
@@ -152,6 +171,9 @@ class MessageModal(discord.ui.Modal, title="Send a Custom Message"):
             await interaction.followup.edit_message(
                 message_id=original_response.id, content="", embed=error_embed
             )
+            audit_log(
+                f"{interaction.user.name} (ID: {interaction.user.id}) failed to send custom message: no access to channel #{self.target_channel.name} (ID: {self.target_channel.id})."
+            )
         elif e.status == 404:  # Channel not found
             logging.error(f"Channel not found. Error: {e}")
             error_embed = discord.Embed(
@@ -161,6 +183,9 @@ class MessageModal(discord.ui.Modal, title="Send a Custom Message"):
             )
             await interaction.followup.edit_message(
                 message_id=original_response.id, content="", embed=error_embed
+            )
+            audit_log(
+                f"{interaction.user.name} (ID: {interaction.user.id}) failed to send custom message: channel #{self.target_channel.name} (ID: {self.target_channel.id}) not found."
             )
         elif e.status == 429:  # Rate limit hit
             logging.error(f"RATE LIMIT. Error: {e}")
@@ -172,6 +197,9 @@ class MessageModal(discord.ui.Modal, title="Send a Custom Message"):
             await interaction.followup.edit_message(
                 message_id=original_response.id, content="", embed=error_embed
             )
+            audit_log(
+                f"{interaction.user.name} (ID: {interaction.user.id}) failed to send custom message: rate limited in channel #{self.target_channel.name} (ID: {self.target_channel.id})."
+            )
         elif e.status in {500, 502, 503, 504}:  # Discord API error
             logging.error(f"Discord API Error. Error: {e}")
             error_embed = discord.Embed(
@@ -181,6 +209,9 @@ class MessageModal(discord.ui.Modal, title="Send a Custom Message"):
             )
             await interaction.followup.edit_message(
                 message_id=original_response.id, content="", embed=error_embed
+            )
+            audit_log(
+                f"{interaction.user.name} (ID: {interaction.user.id}) failed to send custom message: Discord API error in channel #{self.target_channel.name} (ID: {self.target_channel.id})."
             )
         else:  # Other errors
             logging.error(
@@ -193,6 +224,9 @@ class MessageModal(discord.ui.Modal, title="Send a Custom Message"):
             )
             await interaction.followup.edit_message(
                 message_id=original_response.id, content="", embed=error_embed
+            )
+            audit_log(
+                f"{interaction.user.name} (ID: {interaction.user.id}) failed to send custom message in channel #{self.target_channel.name} (ID: {self.target_channel.id}): {e}"
             )
 
 
@@ -210,10 +244,14 @@ class Message(commands.Cog):
         await interaction.response.send_message(
             "Choose the message format:", view=view, ephemeral=True
         )
+        audit_log(
+            f"{interaction.user.name} (ID: {interaction.user.id}) invoked message command for channel #{channel.name} (ID: {channel.id})."
+        )
 
     @commands.Cog.listener()
     async def on_ready(self):
         logging.info("\033[96mMessage\033[0m cog synced successfully.")
+        audit_log("Message cog synced successfully.")
 
 
 async def setup(bot: commands.Bot):
