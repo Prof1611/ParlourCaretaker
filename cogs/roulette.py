@@ -90,12 +90,24 @@ class Roulette(commands.Cog):
             self.winning_fates = self.config["roulette_fates"]["winning"]
             self.losing_fates = self.config["roulette_fates"]["losing"]
             self.mystery_fates = self.config["roulette_fates"]["mystery"]
+            # Load outcome probabilities; default to equal weights if not found.
+            self.probabilities = self.config.get(
+                "roulette_probabilities", {"win": 1, "loss": 1, "mystery": 1}
+            )
         except Exception as e:
-            logging.error(f"Failed to load roulette fates from config: {e}")
+            logging.error(f"Failed to load roulette configuration: {e}")
             raise
 
     def get_roulette_outcome(self):
-        fate_type = random.choice(["win", "loss", "mystery"])
+        # Use the probabilities from config (or default equal weights)
+        outcomes = ["win", "loss", "mystery"]
+        weights = [
+            self.probabilities.get("win", 1),
+            self.probabilities.get("loss", 1),
+            self.probabilities.get("mystery", 1),
+        ]
+        fate_type = random.choices(outcomes, weights=weights, k=1)[0]
+
         if fate_type == "win":
             fate = random.choice(self.winning_fates)
             embed_color = discord.Color.green()
@@ -254,8 +266,7 @@ class Roulette(commands.Cog):
                     color=discord.Color.blurple(),
                 )
                 embed.set_author(
-                    name=actor.display_name,
-                    icon_url=actor.display_avatar.url,
+                    name=actor.display_name, icon_url=actor.display_avatar.url
                 )
                 embed.add_field(name="🏹 Plays", value=plays, inline=True)
                 embed.add_field(name="🏅 Wins", value=wins, inline=True)
@@ -339,6 +350,127 @@ class Roulette(commands.Cog):
             except Exception:
                 pass
 
+    @app_commands.command(
+        name="roulette_update", description="Manually adjust a player's roulette stats."
+    )
+    async def roulette_update(
+        self,
+        interaction: discord.Interaction,
+        target: discord.User,
+        wins: int,
+        losses: int,
+        streak: int,
+        plays: int,
+    ):
+        """Allows adjustment of a player's stats."""
+        try:
+            cursor.execute(
+                "REPLACE INTO roulette_players (user_id, username, wins, losses, streak, plays) VALUES (?, ?, ?, ?, ?, ?)",
+                (target.id, target.display_name, wins, losses, streak, plays),
+            )
+            conn.commit()
+            embed = discord.Embed(
+                title="✅ Stats Updated",
+                description=(
+                    f"Updated stats for {target.display_name}:\nWins: {wins}\nLosses: {losses}\nStreak: {streak}\nPlays: {plays}"
+                ),
+                color=discord.Color.green(),
+            )
+            await interaction.response.send_message(embed=embed)
+            audit_log(
+                f"{interaction.user.name} (ID: {interaction.user.id}) updated stats for {target.display_name} (ID: {target.id}) to Wins: {wins}, Losses: {losses}, Streak: {streak}, Plays: {plays}."
+            )
+        except Exception as e:
+            logging.error(f"Error updating stats via command: {e}")
+            audit_log(
+                f"Error by {interaction.user.name} (ID: {interaction.user.id}) while updating stats for user ID {target.id}: {e}"
+            )
+            error_embed = discord.Embed(
+                title="❌ Error",
+                description="Failed to update player stats. Please check the parameters and try again.",
+                color=discord.Color.red(),
+            )
+            await interaction.response.send_message(embed=error_embed)
+
+    @app_commands.command(
+        name="roulette_global_stats",
+        description="Display global roulette statistics, outcome probabilities, and future projections.",
+    )
+    async def global_stats(self, interaction: discord.Interaction):
+        """Shows overall game statistics along with outcome probabilities and projections for future plays."""
+        try:
+            cursor.execute(
+                "SELECT SUM(wins), SUM(losses), SUM(plays) FROM roulette_players"
+            )
+            result = cursor.fetchone()
+            total_wins, total_losses, total_plays = result if result else (0, 0, 0)
+
+            cursor.execute("SELECT COUNT(*) FROM roulette_players")
+            total_players = cursor.fetchone()[0]
+
+            if total_plays == 0:
+                embed = discord.Embed(
+                    title="Global Roulette Statistics",
+                    description="No data available yet. Start playing to generate statistics!",
+                    color=discord.Color.red(),
+                )
+                await interaction.response.send_message(embed=embed)
+                return
+
+            mystery_outcomes = total_plays - (total_wins + total_losses)
+            win_prob = total_wins / total_plays
+            loss_prob = total_losses / total_plays
+            mystery_prob = mystery_outcomes / total_plays
+
+            future_plays = 1000
+            projected_wins = win_prob * future_plays
+            projected_losses = loss_prob * future_plays
+            projected_mystery = mystery_prob * future_plays
+
+            embed = discord.Embed(
+                title="🌐 Global Roulette Statistics 🌐",
+                color=discord.Color.blurple(),
+            )
+            embed.add_field(name="Total Plays", value=total_plays, inline=False)
+            embed.add_field(name="Total Wins", value=total_wins, inline=True)
+            embed.add_field(name="Total Losses", value=total_losses, inline=True)
+            embed.add_field(
+                name="Total Mystery Outcomes", value=mystery_outcomes, inline=True
+            )
+            embed.add_field(name="Total Players", value=total_players, inline=False)
+            embed.add_field(
+                name="Outcome Probabilities",
+                value=(
+                    f"Win: {win_prob*100:.1f}%\nLoss: {loss_prob*100:.1f}%\nMystery: {mystery_prob*100:.1f}%"
+                ),
+                inline=False,
+            )
+            embed.add_field(
+                name="Projections (Next 1,000 Plays)",
+                value=(
+                    f"Projected Wins: {projected_wins:.0f}\nProjected Losses: {projected_losses:.0f}\nProjected Mystery: {projected_mystery:.0f}"
+                ),
+                inline=False,
+            )
+            embed.set_footer(
+                text="These projections are based on current outcome probabilities."
+            )
+            await interaction.response.send_message(embed=embed)
+            audit_log(
+                f"{interaction.user.name} (ID: {interaction.user.id}) viewed global roulette statistics."
+            )
+        except Exception as e:
+            logging.error(f"Error fetching global statistics: {e}")
+            audit_log(
+                f"Error in /roulette_global_stats by {interaction.user.name} (ID: {interaction.user.id}): {e}"
+            )
+            error_embed = discord.Embed(
+                title="❌ Error",
+                description="Failed to retrieve global statistics. Please try again later.",
+                color=discord.Color.red(),
+            )
+            await interaction.response.send_message(embed=error_embed)
+
     def update_stats(self, user_id: int, outcome: str, username: str) -> None:
         try:
             cursor.execute(
@@ -346,7 +478,6 @@ class Roulette(commands.Cog):
                 (user_id,),
             )
             result = cursor.fetchone()
-
             if result:
                 wins, losses, streak, plays = result
             else:

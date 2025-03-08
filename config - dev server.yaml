@@ -75,3 +75,9 @@ roulette_fates:
     - "Your fate is undecided… Come back at midnight and try again. ⏳"
     - "You awaken in a grand ballroom. Music plays, but no one else is there… 🎸"
     - "The spirit of music smiles upon you… but does not reveal its secrets. 🫀"
+
+roulette_probabilities:
+  win: 2
+  loss: 2.5
+  mystery: 1
+  
