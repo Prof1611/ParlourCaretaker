@@ -51,6 +51,43 @@ The Parlour Caretaker is a custom Discord bot designed to assist with moderation
   - **`/roulette_stats`** – Check your individual roulette game statistics.
   - **`/roulette_leaderboard`** – Display the top 10 players in the roulette game.
 
+## Configuration
+
+The bot uses a YAML configuration file (`config.yaml`) to control various settings. Key configuration options include:
+
+- **General Settings:**
+  - `statuses`:  
+    A list of status messages to rotate through for the bot's presence.
+
+- **Channel IDs:**
+  - `logs_channel_id`:  
+    The ID of the channel where moderation actions are logged.
+  - `dm_forward_channel_id`:  
+    The ID of the channel used for forwarding direct messages.
+  - `games_channel_id`:  
+    The ID of the channel for games night announcements.
+  - `gigchats_id`:  
+    The ID of the channel used for gig chats forum updates.
+  - `welcome_channel_id`:  
+    The ID of the channel where welcome messages are posted.
+
+- **Role Settings:**
+  - `newjoin_role_id`:  
+    The role ID to automatically assign to new members.
+
+- **Feature Toggles:**
+  - `welcome_enabled`:  
+    Set to `true` to enable welcome messages.
+  - `autorole_enabled`:  
+    Set to `true` to enable auto role assignment.
+
+- **Roulette Fates:**
+  - `roulette_fates`:  
+    Contains three lists:
+    - `winning`: An array of messages for winning outcomes.
+    - `losing`: An array of messages for losing outcomes.
+    - `mystery`: An array of messages for mystery outcomes.
+
 ### Logging & Audit Trails
 
 - **Moderation Logs:**  
