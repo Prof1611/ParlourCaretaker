@@ -46,12 +46,9 @@ class StickyFormatSelect(discord.ui.Select):
                 interaction.client, self.view.sticky_cog, self.view.selected_format
             )
         )
+        # Log the selected format using the channel from the interaction.
         audit_log(
-            f"{interaction.user.name} (ID: {interaction.user.id}) selected sticky format '{self.values[0]}' for channel #{self.view.sticky_cog.bot.get_channel(self.view.sticky_cog.stickies.get(self.view.sticky_cog.bot.get_channel(self.view.sticky_cog.bot.get_channel(self.view.target_channel.id)))).name if self.view.target_channel else 'Unknown'} (ID: {self.view.target_channel.id})."
-        )
-        # Alternatively, if the channel object is directly available:
-        audit_log(
-            f"{interaction.user.name} (ID: {interaction.user.id}) selected sticky format '{self.values[0]}' for channel #{self.view.target_channel.name} (ID: {self.view.target_channel.id})."
+            f"{interaction.user.name} (ID: {interaction.user.id}) selected sticky format '{self.values[0]}' for channel #{interaction.channel.name} (ID: {interaction.channel.id})."
         )
 
 
@@ -89,9 +86,9 @@ class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
                 old_message = await channel.fetch_message(previous_sticky["message_id"])
                 await old_message.delete()
             except discord.NotFound:
-                logging.warning(f"Old sticky not found in #{channel}.")
+                logging.warning(f"Old sticky not found in #{channel.name}.")
             except Exception as e:
-                logging.error(f"Error deleting old sticky in #{channel}: {e}")
+                logging.error(f"Error deleting old sticky in #{channel.name}: {e}")
 
         try:
             sticky_msg = await self.sticky_cog._send_sticky(
@@ -106,11 +103,11 @@ class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
             self.sticky_cog.update_sticky_in_db(
                 channel.id, content, sticky_msg.id, self.selected_format
             )
-            logging.info(f"Sticky message successfully set in #{channel}.")
+            logging.info(f"Sticky message successfully set in #{channel.name}.")
             await interaction.response.send_message(
                 embed=discord.Embed(
                     title="Sticky Message Set",
-                    description=f"Sticky message successfully set in #{channel}!",
+                    description=f"Sticky message successfully set in #{channel.name}!",
                     color=discord.Color.green(),
                 ),
                 ephemeral=True,
@@ -220,7 +217,7 @@ class Sticky(commands.Cog):
                                     await msg.delete()
                                 except Exception as e:
                                     logging.error(
-                                        f"Error deleting duplicate sticky in #{channel}: {e}"
+                                        f"Error deleting duplicate sticky in #{channel.name}: {e}"
                                     )
                     return
 
@@ -307,14 +304,14 @@ class Sticky(commands.Cog):
         if channel.id not in self.stickies:
             embed = discord.Embed(
                 title="No Sticky Message",
-                description=f"There is no sticky message set in #{channel}.",
+                description=f"There is no sticky message set in #{channel.name}.",
                 color=discord.Color.red(),
             )
             confirmation = await interaction.followup.send(embed=embed)
             await asyncio.sleep(3)
             await confirmation.delete()
             audit_log(
-                f"{interaction.user.name} (ID: {interaction.user.id}) attempted to remove sticky message in channel #{channel.name} (ID: {channel.id}) but none was set."
+                f"{interaction.user.name} (ID: {interaction.user.id}) attempted to remove sticky message in channel #{channel.name} (ID: {channel.id}), but none was set."
             )
             return
 
@@ -334,7 +331,7 @@ class Sticky(commands.Cog):
 
         embed = discord.Embed(
             title="Sticky Removed",
-            description=f"Sticky message successfully removed from #{channel}.",
+            description=f"Sticky message successfully removed from #{channel.name}.",
             color=discord.Color.green(),
         )
         confirmation = await interaction.followup.send(embed=embed)
@@ -366,10 +363,10 @@ class Sticky(commands.Cog):
 
     async def handle_error(self, e, channel, interaction):
         if e.status == 403:
-            logging.error(f"No access to #{channel}. Error: {e}")
+            logging.error(f"No access to #{channel.name}. Error: {e}")
             embed = discord.Embed(
                 title="Error",
-                description=f"I don't have access to #{channel}!",
+                description=f"I don't have access to #{channel.name}!",
                 color=discord.Color.red(),
             )
             await interaction.followup.send(embed=embed)
@@ -393,17 +390,17 @@ class Sticky(commands.Cog):
             logging.error(f"Discord API Error. Error: {e}")
             embed = discord.Embed(
                 title="Error",
-                description=f"Failed to set sticky message in #{channel}. Please try later.",
+                description=f"Failed to set sticky message in #{channel.name}. Please try later.",
                 color=discord.Color.red(),
             )
             await interaction.followup.send(embed=embed)
         else:
             logging.error(
-                f"Error when attempting to set sticky message in #{channel}. Error: {e}"
+                f"Error when attempting to set sticky message in #{channel.name}. Error: {e}"
             )
             embed = discord.Embed(
                 title="Error",
-                description=f"Failed to set sticky message in #{channel}.",
+                description=f"Failed to set sticky message in #{channel.name}.",
                 color=discord.Color.red(),
             )
             await interaction.followup.send(embed=embed)
