@@ -22,7 +22,7 @@ class Welcome(commands.Cog):
         self.welcome_channel_id = self.config.get("welcome_channel_id")
         self.welcome_enabled = self.config.get("welcome_enabled", True)
         # Set the local welcome image path
-        self.welcome_image_path = "welcome_image.jpeg"
+        self.welcome_image_path = "welcome-image.jpg"
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -58,13 +58,13 @@ class Welcome(commands.Cog):
             ),
             color=discord.Color.dark_red(),
         )
-        embed.set_image(url="attachment://welcome_image.jpeg")
+        embed.set_image(url="attachment://welcome-image.jpg")
 
         try:
             await channel.send(
                 embed=embed,
                 file=discord.File(
-                    self.welcome_image_path, filename="welcome_image.jpeg"
+                    self.welcome_image_path, filename="welcome-image.jpg"
                 ),
             )
             logging.info(

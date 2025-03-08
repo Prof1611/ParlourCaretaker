@@ -67,9 +67,9 @@ bot_statuses = random.choice(config["statuses"])
 dm_forward_channel_id = config["dm_forward_channel_id"]
 
 
-@tasks.loop(seconds=120)
+@tasks.loop(seconds=240)
 async def change_bot_status():
-    """Changes the bot's 'listening' status every 120 seconds."""
+    """Changes the bot's 'listening' status every 240 seconds."""
     next_status = random.choice(config["statuses"])
     activity = discord.Activity(type=discord.ActivityType.listening, name=next_status)
     await bot.change_presence(status=discord.Status.online, activity=activity)
