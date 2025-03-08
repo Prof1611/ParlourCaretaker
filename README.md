@@ -105,7 +105,7 @@ The bot uses a YAML configuration file (`config.yaml`) to control various settin
   All moderation and administrative actions (ban, kick, timeout, etc.) are automatically logged in a dedicated log channel. This helps maintain a clear record of actions for accountability and transparency.
 
 - **Internal Audit Log:**  
-  Every command action (excluding roulette commands) is recorded in an internal audit log file (`audit.log`). Audit entries include:
+  Every command action is recorded in an internal audit log file (`audit.log`). Audit entries include:
   - Actor’s name and user ID (the moderator or user who invoked the command)
   - Target details (e.g. target member’s name and ID)
   - Guild and channel names and IDs
