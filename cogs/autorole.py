@@ -102,12 +102,16 @@ class AutoRole(commands.Cog):
                 audit_log(
                     f"Assigned role '{role.name}' (ID: {role.id}) to new member '@{member.name}' in guild '{member.guild.name}' (ID: {member.guild.id})."
                 )
-                # Schedule removal of the new joiner role after 1 week (7 days) if applicable.
+                # Schedule removal of the new joiner role after 1 week if applicable.
                 if role.id == self.newjoin_role_id:
                     removal_time = (
-                        datetime.datetime.now(datetime.timezone.utc)
-                        + datetime.timedelta(days=7)
-                    ).isoformat()
+                        (
+                            datetime.datetime.now(datetime.timezone.utc)
+                            + datetime.timedelta(days=7)
+                        )
+                        .replace(microsecond=0)
+                        .isoformat(sep=" ")
+                    )
                     with self.db:
                         self.db.execute(
                             "INSERT INTO scheduled_role_removals (guild_id, member_id, role_id, removal_time) VALUES (?, ?, ?, ?)",

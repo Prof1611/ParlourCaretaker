@@ -1,5 +1,5 @@
 # ==========================
-# The Parlour Caretaker Configuration - The Parlour Dev Server
+# The Parlour Caretaker Configuration - The Parlour
 # ==========================
 
 # --------------------------
@@ -34,25 +34,25 @@ statuses:
 # Channel IDs
 # --------------------------
 # These are the channels used by the bot for various functions.
-logs_channel_id: 1237165394649682003    # Channel where moderation actions are logged.
-dm_forward_channel_id: 1161423690517463164  # Channel for forwarding direct messages.
-games_channel_id: 1281260171754082430     # Channel for sending games night announcements.
-gigchats_id: 1302737683537334332           # Channel for gig chats forum.
-welcome_channel_id: 1346179245923106907    # Channel where welcome messages are posted.
+logs_channel_id: 1220451817146683423         # Channel where moderation actions are logged.
+dm_forward_channel_id: 1239669255012614267    # Channel for forwarding direct messages.
+games_channel_id: 1159782202985426964         # Channel for sending games night announcements.
+gigchats_id: 1195097407604666399               # Channel for gig chats forum.
+welcome_channel_id: 1151864993571160135        # Channel where welcome messages are posted.
 
 # --------------------------
 # Role Settings
 # --------------------------
 # Roles to assign automatically to new members.
-newjoin_role_id: 1346184212872433755           # Role ID for new joiners.
-dinner_guest_role_id: 1348261122188509184      # Role ID for dinner guests.
+newjoin_role_id: 1278323218389925910           # Role ID for new joiners.
+dinner_guest_role_id: 1151863422133227594      # Role ID for dinner guests.
 
 # --------------------------
 # Feature Toggles
 # --------------------------
 # Enable or disable specific features. Set to 'true' to enable the feature.
-welcome_enabled: true    # Set to true to enable welcome messages.
-autorole_enabled: true   # Set to true to enable auto role assignment.
+welcome_enabled: false     # Set to true to enable welcome messages.
+autorole_enabled: true    # Set to true to enable auto role assignment.
 
 # --------------------------
 # Roulette Fates

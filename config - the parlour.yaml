@@ -44,7 +44,7 @@ welcome_channel_id: 1151864993571160135        # Channel where welcome messages 
 # Role Settings
 # --------------------------
 # Roles to assign automatically to new members.
-newjoin_role_id: 1151863422133227594           # Role ID for new joiners.
+newjoin_role_id: 1278323218389925910           # Role ID for new joiners.
 dinner_guest_role_id: 1151863422133227594      # Role ID for dinner guests.
 
 # --------------------------
@@ -52,7 +52,7 @@ dinner_guest_role_id: 1151863422133227594      # Role ID for dinner guests.
 # --------------------------
 # Enable or disable specific features. Set to 'true' to enable the feature.
 welcome_enabled: false     # Set to true to enable welcome messages.
-autorole_enabled: false    # Set to true to enable auto role assignment.
+autorole_enabled: true    # Set to true to enable auto role assignment.
 
 # --------------------------
 # Roulette Fates
