@@ -14,7 +14,10 @@ def audit_log(message: str):
 
 class DMModal(discord.ui.Modal, title="Send a Direct Message"):
     message_input = discord.ui.TextInput(
-        label="Message", style=discord.TextStyle.long, required=True
+        label="Message",
+        style=discord.TextStyle.long,
+        required=True,
+        placeholder="Enter your message here...",
     )
 
     def __init__(self, bot: commands.Bot, user: discord.User, actor: discord.User):

@@ -237,6 +237,7 @@ class Message(commands.Cog):
     @app_commands.command(
         name="message", description="Sends a custom message in a specified channel."
     )
+    @app_commands.describe(channel="The channel in which to send the custom message.")
     async def message_command(
         self, interaction: discord.Interaction, channel: discord.TextChannel
     ):

@@ -1,12 +1,13 @@
 import discord
-import logging
+import random
 import sqlite3
-import asyncio
-from discord import app_commands
-from discord.ext import commands, tasks
-from datetime import datetime, timedelta, timezone
+import logging
 import yaml
+from discord.ext import commands, tasks
+from discord import app_commands
+import datetime
 import re
+from datetime import datetime, timedelta, timezone
 
 
 def audit_log(message: str):
@@ -49,7 +50,7 @@ class TempBan(commands.Cog):
             raise ValueError(
                 """Please specify the duration in either seconds(s), minutes(m), hours(h), or days(d)!
 
-**Examples:**
+Examples:
     '100s', '5m', '3h', '2d'."""
             )
         try:
@@ -83,6 +84,11 @@ class TempBan(commands.Cog):
     @app_commands.command(
         name="tempban",
         description="Temporarily bans a member and sends them a notice via DM.",
+    )
+    @app_commands.describe(
+        user="The member to be temporarily banned",
+        duration="The duration for the ban (e.g. '5m', '3h', '2d')",
+        reason="The reason for the temporary ban",
     )
     async def tempban(
         self,
@@ -224,7 +230,7 @@ The Parlour Moderation Team
                 except discord.HTTPException as e:
                     logging.error(f"Error logging temporary ban: {e}")
                     audit_log(
-                        f"{moderator.name} (ID: {moderator.id}) encountered error when logging temporary ban for {user.name} (ID: {user.id}) in log channel (ID: {logs_channel_id}): {e}"
+                        f"{moderator.name} (ID: {moderator.id}) encountered error logging temporary ban for {user.name} (ID: {user.id}) in log channel (ID: {logs_channel_id}): {e}"
                     )
                     await interaction.followup.send(
                         embed=discord.Embed(

@@ -29,7 +29,7 @@ class StickyFormatSelect(discord.ui.Select):
             discord.SelectOption(
                 label="Embed",
                 value="embed",
-                description="Send as an embed with the title 'Sticky Message'.",
+                description="Send as an embed with title 'Sticky Message'.",
             ),
         ]
         super().__init__(
@@ -46,7 +46,6 @@ class StickyFormatSelect(discord.ui.Select):
                 interaction.client, self.view.sticky_cog, self.view.selected_format
             )
         )
-        # Log the selected format using the channel from the interaction.
         audit_log(
             f"{interaction.user.name} (ID: {interaction.user.id}) selected sticky format '{self.values[0]}' for channel #{interaction.channel.name} (ID: {interaction.channel.id})."
         )
@@ -107,7 +106,7 @@ class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
             await interaction.response.send_message(
                 embed=discord.Embed(
                     title="Sticky Message Set",
-                    description=f"Sticky message successfully set in #{channel.name}!",
+                    description=f"Sticky message successfully set in #{channel.name}!\n\nTo change it later, run `/removesticky` first.",
                     color=discord.Color.green(),
                 ),
                 ephemeral=True,
@@ -283,7 +282,8 @@ class Sticky(commands.Cog):
             return await channel.send(new_content)
 
     @app_commands.command(
-        name="setsticky", description="Set a sticky message in the current channel."
+        name="setsticky",
+        description="Set a sticky message in the channel.",
     )
     async def set_sticky(self, interaction: discord.Interaction):
         view = StickyFormatView(self)
@@ -296,7 +296,7 @@ class Sticky(commands.Cog):
 
     @app_commands.command(
         name="removesticky",
-        description="Remove the sticky message from the current channel.",
+        description="Remove the sticky message in the channel.",
     )
     async def remove_sticky(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -406,5 +406,5 @@ class Sticky(commands.Cog):
             await interaction.followup.send(embed=embed)
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(Sticky(bot))

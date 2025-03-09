@@ -27,6 +27,9 @@ class Ban(commands.Cog):
     @app_commands.command(
         name="ban", description="Bans a member and sends them a notice via DM."
     )
+    @app_commands.describe(
+        user="The member to ban", reason="The reason for banning the member"
+    )
     async def ban(
         self, interaction: discord.Interaction, user: discord.Member, *, reason: str
     ):
@@ -123,7 +126,7 @@ The Parlour Moderation Team
                         )
                         embed = discord.Embed(
                             title="No Permission",
-                            description=f"I don't have permission to ban members!",
+                            description="I don't have permission to ban members!",
                             color=discord.Color.red(),
                         )
                         await interaction.followup.send(embed=embed)
@@ -190,7 +193,7 @@ The Parlour Moderation Team
                             )
                             embed = discord.Embed(
                                 title="Error",
-                                description=f"Channel not found!",
+                                description="Channel not found!",
                                 color=discord.Color.red(),
                             )
                             await interaction.followup.send(embed=embed)
@@ -201,7 +204,7 @@ The Parlour Moderation Team
                             )
                             embed = discord.Embed(
                                 title="Error",
-                                description=f"Too many requests! Please try later.",
+                                description="Too many requests! Please try later.",
                                 color=discord.Color.red(),
                             )
                             await interaction.followup.send(embed=embed)

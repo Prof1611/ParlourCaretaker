@@ -3,7 +3,7 @@ import logging
 import re
 import yaml
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 from datetime import datetime, timedelta, timezone
 
 
@@ -39,6 +39,11 @@ class Timeout(commands.Cog):
 
     @app_commands.command(
         name="timeout", description="Timeout a member for a specified duration."
+    )
+    @app_commands.describe(
+        user="The member to be timed out",
+        duration="The duration for the timeout (e.g. '30s', '5m', '2h', '1d')",
+        reason="The reason for the timeout (optional; defaults to 'No reason provided.')",
     )
     async def timeout(
         self,
@@ -130,14 +135,12 @@ class Timeout(commands.Cog):
                     audit_log(
                         f"{moderator.name} (ID: {moderator.id}) logged timeout for {user.name} (ID: {user.id}) in log channel #{logs_channel.name} (ID: {logs_channel.id})."
                     )
-                    await interaction.followup.send(
-                        embed=discord.Embed(
-                            title="Action Logged",
-                            description=f"Timeout successfully logged in [logs channel]({log_link}).",
-                            color=discord.Color.green(),
-                        ),
-                        ephemeral=True,
+                    embed = discord.Embed(
+                        title="Action Logged",
+                        description=f"Timeout successfully logged in [logs channel]({log_link}).",
+                        color=discord.Color.green(),
                     )
+                    await interaction.followup.send(embed=embed, ephemeral=True)
                 except discord.HTTPException as e:
                     logging.error(f"Error logging timeout: {e}")
                     audit_log(
@@ -165,6 +168,7 @@ class Timeout(commands.Cog):
     @app_commands.command(
         name="untimeout", description="Remove the timeout from a member."
     )
+    @app_commands.describe(user="The member from whom to remove the timeout")
     async def untimeout(self, interaction: discord.Interaction, user: discord.Member):
         moderator = interaction.user
         if not moderator.guild_permissions.moderate_members:

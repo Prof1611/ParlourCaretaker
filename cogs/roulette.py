@@ -1,3 +1,4 @@
+from typing import Literal, Optional
 import discord
 import random
 import sqlite3
@@ -32,6 +33,7 @@ def audit_log(message: str):
         f.write(f"[{timestamp}] {message}\n")
 
 
+# --- Button Views ---
 class MysteryView(discord.ui.View):
     def __init__(self, cog: "Roulette", actor: discord.User):
         super().__init__(timeout=60)
@@ -42,9 +44,9 @@ class MysteryView(discord.ui.View):
     async def roll_again(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        fate_type, fate, embed_color = self.cog.get_roulette_outcome()
+        outcome, fate, embed_color = self.cog.get_roulette_outcome()
         user_id = interaction.user.id
-        self.cog.update_stats(user_id, fate_type, interaction.user.display_name)
+        self.cog.update_stats(user_id, outcome, interaction.user.display_name)
         embed = discord.Embed(
             title="🎲 Nothing Matters Roulette 🎲",
             description=f"{fate}",
@@ -52,7 +54,7 @@ class MysteryView(discord.ui.View):
         )
         await interaction.response.send_message(embed=embed)
         audit_log(
-            f"{interaction.user.name} (ID: {interaction.user.id}) re-rolled and received a {fate_type.upper()} outcome: {fate}."
+            f"{interaction.user.name} (ID: {interaction.user.id}) re-rolled and received a {outcome.upper()} outcome: {fate}."
         )
 
     @discord.ui.button(label="View Your Stats", style=discord.ButtonStyle.secondary)
@@ -81,6 +83,7 @@ class StatsLeaderboardView(discord.ui.View):
         await self.cog.leaderboard_callback(interaction)
 
 
+# --- Roulette Cog ---
 class Roulette(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -107,7 +110,6 @@ class Roulette(commands.Cog):
             self.probabilities.get("mystery", 1),
         ]
         fate_type = random.choices(outcomes, weights=weights, k=1)[0]
-
         if fate_type == "win":
             fate = random.choice(self.winning_fates)
             embed_color = discord.Color.green()
@@ -120,7 +122,7 @@ class Roulette(commands.Cog):
         return fate_type, fate, embed_color
 
     async def stats_callback(self, interaction: discord.Interaction):
-        user_id: int = interaction.user.id
+        user_id = interaction.user.id
         cursor.execute(
             "SELECT wins, losses, streak, plays FROM roulette_players WHERE user_id = ?",
             (user_id,),
@@ -166,7 +168,7 @@ class Roulette(commands.Cog):
         )
         results = cursor.fetchall()
         if results:
-            description: str = ""
+            description = ""
             for idx, (user_id, username, wins, plays) in enumerate(results, start=1):
                 win_rate = (wins / plays) * 100 if plays > 0 else 0
                 description += (
@@ -198,22 +200,19 @@ class Roulette(commands.Cog):
             f"{actor.name} (ID: {actor.id}) invoked /roulette in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
         )
         try:
-            user_id: int = actor.id
-            fate_type, fate, embed_color = self.get_roulette_outcome()
-
-            # Update player stats regardless of the outcome.
-            self.update_stats(user_id, fate_type, actor.display_name)
+            user_id = actor.id
+            outcome, fate, embed_color = self.get_roulette_outcome()
+            self.update_stats(user_id, outcome, actor.display_name)
             audit_log(
-                f"{actor.name} (ID: {actor.id}) rolled {fate_type.upper()} and received outcome: {fate}."
+                f"{actor.name} (ID: {actor.id}) rolled {outcome.upper()} and received outcome: {fate}."
             )
-
             embed = discord.Embed(
                 title="🎲 Nothing Matters Roulette 🎲",
                 description=f"{fate}",
                 color=embed_color,
             )
             # Choose the appropriate view based on outcome.
-            if fate_type == "mystery":
+            if outcome == "mystery":
                 view = MysteryView(self, actor)
             else:
                 view = StatsLeaderboardView(self, actor)
@@ -243,24 +242,21 @@ class Roulette(commands.Cog):
             f"{actor.name} (ID: {actor.id}) invoked /roulette_stats in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
         )
         try:
-            user_id: int = actor.id
+            user_id = actor.id
             cursor.execute(
                 "SELECT wins, losses, streak, plays FROM roulette_players WHERE user_id = ?",
                 (user_id,),
             )
             result = cursor.fetchone()
-
             if result:
                 wins, losses, streak, plays = result
                 win_rate = (wins / plays) * 100 if plays > 0 else 0
-
                 if streak > 1:
                     streak_display = f"Winning streak of {streak}!"
                 elif streak < -1:
                     streak_display = f"Losing streak of {abs(streak)}!"
                 else:
                     streak_display = "No current streak..."
-
                 embed = discord.Embed(
                     title=f"📊 {actor.display_name}'s Roulette Stats 📊",
                     color=discord.Color.blurple(),
@@ -282,7 +278,6 @@ class Roulette(commands.Cog):
                     description="You haven't played yet! Use `/roulette` to start your journey.",
                     color=discord.Color.red(),
                 )
-
             await interaction.response.send_message(embed=embed)
         except Exception as e:
             logging.error(f"Discord API Error. Error: {e}")
@@ -314,9 +309,8 @@ class Roulette(commands.Cog):
                 "SELECT user_id, username, wins, plays FROM roulette_players ORDER BY wins DESC LIMIT 10"
             )
             results = cursor.fetchall()
-
             if results:
-                description: str = ""
+                description = ""
                 for idx, (user_id, username, wins, plays) in enumerate(
                     results, start=1
                 ):
@@ -333,7 +327,6 @@ class Roulette(commands.Cog):
                     description="No players found.",
                     color=discord.Color.red(),
                 )
-
             await interaction.response.send_message(embed=embed)
         except Exception as e:
             logging.error(f"Discord API Error. Error in leaderboard: {e}")
@@ -353,6 +346,13 @@ class Roulette(commands.Cog):
     @app_commands.command(
         name="roulette_update", description="Manually adjust a player's roulette stats."
     )
+    @app_commands.describe(
+        target="The user whose stats you want to adjust.",
+        wins="The new number of wins for the user.",
+        losses="The new number of losses for the user.",
+        streak="The new streak value for the user.",
+        plays="The new number of plays for the user.",
+    )
     async def roulette_update(
         self,
         interaction: discord.Interaction,
@@ -361,7 +361,7 @@ class Roulette(commands.Cog):
         losses: int,
         streak: int,
         plays: int,
-    ):
+    ) -> None:
         """Allows adjustment of a player's stats."""
         try:
             cursor.execute(
@@ -404,7 +404,6 @@ class Roulette(commands.Cog):
             )
             result = cursor.fetchone()
             total_wins, total_losses, total_plays = result if result else (0, 0, 0)
-
             cursor.execute("SELECT COUNT(*) FROM roulette_players")
             total_players = cursor.fetchone()[0]
 
@@ -482,7 +481,6 @@ class Roulette(commands.Cog):
                 wins, losses, streak, plays = result
             else:
                 wins, losses, streak, plays = 0, 0, 0, 0
-
             plays += 1
             if outcome == "win":
                 wins += 1
@@ -490,7 +488,6 @@ class Roulette(commands.Cog):
             elif outcome == "loss":
                 losses += 1
                 streak = streak - 1 if streak <= 0 else -1
-
             cursor.execute(
                 "REPLACE INTO roulette_players (user_id, username, wins, losses, streak, plays) VALUES (?, ?, ?, ?, ?, ?)",
                 (user_id, username, wins, losses, streak, plays),

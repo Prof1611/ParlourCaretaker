@@ -4,7 +4,6 @@ import yaml
 import datetime
 from discord import app_commands
 from discord.ext import commands
-import asyncio
 
 
 class Kick(commands.Cog):
@@ -28,6 +27,9 @@ class Kick(commands.Cog):
 
     @app_commands.command(
         name="kick", description="Kicks a member and sends them a notice via DM."
+    )
+    @app_commands.describe(
+        user="The member to kick", reason="The reason for kicking the member"
     )
     async def kick(
         self, interaction: discord.Interaction, user: discord.Member, *, reason: str
@@ -100,7 +102,7 @@ The Parlour Moderation Team
                         )
                         await interaction.followup.send(embed=embed)
                 try:
-                    # Try kick the user from the server.
+                    # Try to kick the user from the server.
                     await user.kick(reason=reason)
                     guild = interaction.guild
                     logging.info(
@@ -190,7 +192,7 @@ The Parlour Moderation Team
                             )
                             embed = discord.Embed(
                                 title="Error",
-                                description=f"Channel not found!",
+                                description="Channel not found!",
                                 color=discord.Color.red(),
                             )
                             await interaction.followup.send(embed=embed)
@@ -201,7 +203,7 @@ The Parlour Moderation Team
                             )
                             embed = discord.Embed(
                                 title="Error",
-                                description=f"Too many requests! Please try later.",
+                                description="Too many requests! Please try later.",
                                 color=discord.Color.red(),
                             )
                             await interaction.followup.send(embed=embed)
