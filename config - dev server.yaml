@@ -43,8 +43,9 @@ welcome_channel_id: 1346179245923106907    # Channel where welcome messages are 
 # --------------------------
 # Role Settings
 # --------------------------
-# Role to assign automatically to new joiners.
-newjoin_role_id: 1346184212872433755       # Role ID to assign to new joiners.
+# Roles to assign automatically to new members.
+newjoin_role_id: 1346184212872433755           # Role ID for new joiners.
+dinner_guest_role_id: 1348261122188509184      # Role ID for dinner guests.
 
 # --------------------------
 # Feature Toggles
