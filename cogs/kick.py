@@ -30,17 +30,17 @@ class Kick(commands.Cog):
         name="kick", description="Kicks a member and sends them a notice via DM."
     )
     async def kick(
-        self, interaction: discord.Interaction, member: discord.Member, *, reason: str
+        self, interaction: discord.Interaction, user: discord.Member, *, reason: str
     ):
         # Defer the response to avoid timeout errors.
         await interaction.response.defer()
         moderator = interaction.user  # actor performing the action
 
         try:
-            if member.id in self.config["owner_ids"]:
+            if user.id in self.config["owner_ids"]:
                 logging.error("Owner entered as victim.")
                 self.audit_log(
-                    f"{moderator.name} (ID: {moderator.id}) attempted to kick owner {member.name} (ID: {member.id}). Action aborted."
+                    f"{moderator.name} (ID: {moderator.id}) attempted to kick owner {user.name} (ID: {user.id}). Action aborted."
                 )
                 embed = discord.Embed(
                     title="Error",
@@ -53,7 +53,7 @@ class Kick(commands.Cog):
                 try:
                     dm_text = f"""**NOTICE: Kick from The Parlour Discord Server**
 
-Dear {member.mention},
+Dear {user.mention},
 
 We are writing to inform you that you have been kicked from The Parlour Discord server. This action is a result of your violations of our community rules.
 
@@ -65,12 +65,12 @@ You are welcome to rejoin the server provided you review our community rules to 
 Sincerely,
 The Parlour Moderation Team
 """
-                    await member.send(dm_text)
+                    await user.send(dm_text)
                     logging.info(
-                        f"Successfully sent kick notice to {member.name} (ID: {member.id}) via DM."
+                        f"Successfully sent kick notice to {user.name} (ID: {user.id}) via DM."
                     )
                     self.audit_log(
-                        f"{moderator.name} (ID: {moderator.id}) sent kick notice via DM to {member.name} (ID: {member.id})."
+                        f"{moderator.name} (ID: {moderator.id}) sent kick notice via DM to {user.name} (ID: {user.id})."
                     )
                 except discord.HTTPException as e:
                     if e.status == 403:  # DMs Disabled
@@ -78,7 +78,7 @@ The Parlour Moderation Team
                             f"DMs disabled when attempting to send kick notice via DM. Error: {e}"
                         )
                         self.audit_log(
-                            f"{moderator.name} (ID: {moderator.id}) failed to send DM notice to {member.name} (ID: {member.id}); DMs disabled."
+                            f"{moderator.name} (ID: {moderator.id}) failed to send DM notice to {user.name} (ID: {user.id}); DMs disabled."
                         )
                         embed = discord.Embed(
                             title="Error",
@@ -91,27 +91,27 @@ The Parlour Moderation Team
                             f"Error when attempting to send kick notice via DM: {e}"
                         )
                         self.audit_log(
-                            f"{moderator.name} (ID: {moderator.id}) encountered error sending DM notice to {member.name} (ID: {member.id}): {e}"
+                            f"{moderator.name} (ID: {moderator.id}) encountered error sending DM notice to {user.name} (ID: {user.id}): {e}"
                         )
                         embed = discord.Embed(
                             title="Error",
-                            description=f"Failed to send kick notice to {member.mention} via DM.",
+                            description=f"Failed to send kick notice to {user.mention} via DM.",
                             color=discord.Color.red(),
                         )
                         await interaction.followup.send(embed=embed)
                 try:
                     # Try kick the user from the server.
-                    await member.kick(reason=reason)
+                    await user.kick(reason=reason)
                     guild = interaction.guild
                     logging.info(
-                        f"Kicked {member.name} (ID: {member.id}) from '{guild.name}' (ID: {guild.id})."
+                        f"Kicked {user.name} (ID: {user.id}) from '{guild.name}' (ID: {guild.id})."
                     )
                     self.audit_log(
-                        f"{moderator.name} (ID: {moderator.id}) kicked {member.name} (ID: {member.id}) from guild '{guild.name}' (ID: {guild.id}) for reason: {reason}."
+                        f"{moderator.name} (ID: {moderator.id}) kicked {user.name} (ID: {user.id}) from guild '{guild.name}' (ID: {guild.id}) for reason: {reason}."
                     )
                     embed = discord.Embed(
                         title="Member Kicked",
-                        description=f"Kicked {member.mention} from the server and sent them a notice via DM.",
+                        description=f"Kicked {user.mention} from the server and sent them a notice via DM.",
                         color=discord.Color.green(),
                     )
                     await interaction.followup.send(embed=embed)
@@ -119,7 +119,7 @@ The Parlour Moderation Team
                     if e.status == 403:  # Bot has no permission to kick
                         logging.error(f"No permission to kick. Error: {e}")
                         self.audit_log(
-                            f"{moderator.name} (ID: {moderator.id}) failed to kick {member.name} (ID: {member.id}) - insufficient permissions in guild '{guild.name}' (ID: {guild.id})."
+                            f"{moderator.name} (ID: {moderator.id}) failed to kick {user.name} (ID: {user.id}) - insufficient permissions in guild '{guild.name}' (ID: {guild.id})."
                         )
                         embed = discord.Embed(
                             title="Error",
@@ -129,14 +129,14 @@ The Parlour Moderation Team
                         await interaction.followup.send(embed=embed)
                     else:
                         logging.error(
-                            f"Error when attempting to kick {member.name} from '{guild.name}'. Error: {e}"
+                            f"Error when attempting to kick {user.name} from '{guild.name}'. Error: {e}"
                         )
                         self.audit_log(
-                            f"{moderator.name} (ID: {moderator.id}) encountered error while kicking {member.name} (ID: {member.id}) from guild '{guild.name}' (ID: {guild.id}): {e}"
+                            f"{moderator.name} (ID: {moderator.id}) encountered error while kicking {user.name} (ID: {user.id}) from guild '{guild.name}' (ID: {guild.id}): {e}"
                         )
                         embed = discord.Embed(
                             title="Error",
-                            description=f"Failed to kick {member.mention}.",
+                            description=f"Failed to kick {user.mention}.",
                             color=discord.Color.red(),
                         )
                         await interaction.followup.send(embed=embed)
@@ -148,8 +148,8 @@ The Parlour Moderation Team
                 log_link = f"https://discord.com/channels/{guild.id}/{logs_channel_id}"
                 if logs_channel:
                     try:
-                        log_message = f"""**Username:** {member.mention}
-**User ID:** {member.id}
+                        log_message = f"""**Username:** {user.mention}
+**User ID:** {user.id}
 **Category of Discipline:** Kick
 **Timespan of Discipline:** N/A
 **Reason of Discipline:** {reason}
@@ -161,7 +161,7 @@ The Parlour Moderation Team
                             f"Kick logged in '#{logs_channel.name}' (ID: {logs_channel.id})."
                         )
                         self.audit_log(
-                            f"{moderator.name} (ID: {moderator.id}) logged kick for {member.name} (ID: {member.id}) in log channel #{logs_channel.name} (ID: {logs_channel.id})."
+                            f"{moderator.name} (ID: {moderator.id}) logged kick for {user.name} (ID: {user.id}) in log channel #{logs_channel.name} (ID: {logs_channel.id})."
                         )
                         embed = discord.Embed(
                             title="Action Logged",
@@ -175,7 +175,7 @@ The Parlour Moderation Team
                                 f"No access to '#{logs_channel.name}' (ID: {logs_channel.id}). Error: {e}"
                             )
                             self.audit_log(
-                                f"{moderator.name} (ID: {moderator.id}) failed to log action in log channel #{logs_channel.name} (ID: {logs_channel.id}) for {member.name} (ID: {member.id}); no access."
+                                f"{moderator.name} (ID: {moderator.id}) failed to log action in log channel #{logs_channel.name} (ID: {logs_channel.id}) for {user.name} (ID: {user.id}); no access."
                             )
                             embed = discord.Embed(
                                 title="Error",
@@ -186,7 +186,7 @@ The Parlour Moderation Team
                         elif e.status == 404:
                             logging.error(f"Channel not found. Error: {e}")
                             self.audit_log(
-                                f"{moderator.name} (ID: {moderator.id}) failed to log action; log channel not found for {member.name} (ID: {member.id})."
+                                f"{moderator.name} (ID: {moderator.id}) failed to log action; log channel not found for {user.name} (ID: {user.id})."
                             )
                             embed = discord.Embed(
                                 title="Error",
@@ -197,7 +197,7 @@ The Parlour Moderation Team
                         elif e.status == 429:
                             logging.error(f"RATE LIMIT. Error: {e}")
                             self.audit_log(
-                                f"{moderator.name} (ID: {moderator.id}) encountered rate limit when logging kick for {member.name} (ID: {member.id})."
+                                f"{moderator.name} (ID: {moderator.id}) encountered rate limit when logging kick for {user.name} (ID: {user.id})."
                             )
                             embed = discord.Embed(
                                 title="Error",
@@ -208,7 +208,7 @@ The Parlour Moderation Team
                         elif e.status in {500, 502, 503, 504}:
                             logging.error(f"Discord API Error. Error: {e}")
                             self.audit_log(
-                                f"{moderator.name} (ID: {moderator.id}) encountered Discord API error when logging kick for {member.name} (ID: {member.id}): {e}"
+                                f"{moderator.name} (ID: {moderator.id}) encountered Discord API error when logging kick for {user.name} (ID: {user.id}): {e}"
                             )
                             embed = discord.Embed(
                                 title="Error",
@@ -221,7 +221,7 @@ The Parlour Moderation Team
                                 f"Failed to log kick in '#{logs_channel.name}' (ID: {logs_channel.id}). Error: {e}"
                             )
                             self.audit_log(
-                                f"{moderator.name} (ID: {moderator.id}) unknown error when logging kick for {member.name} (ID: {member.id}) in log channel #{logs_channel.name} (ID: {logs_channel.id}): {e}"
+                                f"{moderator.name} (ID: {moderator.id}) unknown error when logging kick for {user.name} (ID: {user.id}) in log channel #{logs_channel.name} (ID: {logs_channel.id}): {e}"
                             )
                             embed = discord.Embed(
                                 title="Error",
@@ -232,11 +232,11 @@ The Parlour Moderation Team
         except discord.HTTPException as e:
             logging.error(f"Error when attempting to kick: {e}")
             self.audit_log(
-                f"{moderator.name} (ID: {moderator.id}) critical error: Failed to kick and send notice to {member.name} (ID: {member.id}): {e}"
+                f"{moderator.name} (ID: {moderator.id}) critical error: Failed to kick and send notice to {user.name} (ID: {user.id}): {e}"
             )
             embed = discord.Embed(
                 title="Error",
-                description=f"Failed to ban and send notice to {member.mention}. Error: {e}",
+                description=f"Failed to ban and send notice to {user.mention}. Error: {e}",
                 color=discord.Color.red(),
             )
             await interaction.followup.send(embed=embed)

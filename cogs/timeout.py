@@ -43,14 +43,14 @@ class Timeout(commands.Cog):
     async def timeout(
         self,
         interaction: discord.Interaction,
-        member: discord.Member,
+        user: discord.Member,
         duration: str,
         *,
         reason: str = "No reason provided.",
     ):
         moderator = interaction.user  # Actor performing the command.
         audit_log(
-            f"{moderator.name} (ID: {moderator.id}) invoked /timeout for {member.name} (ID: {member.id}) with duration '{duration}' in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
+            f"{moderator.name} (ID: {moderator.id}) invoked /timeout for {user.name} (ID: {user.id}) with duration '{duration}' in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
         )
 
         if not interaction.user.guild_permissions.moderate_members:
@@ -73,25 +73,25 @@ class Timeout(commands.Cog):
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
             audit_log(
-                f"{moderator.name} (ID: {moderator.id}) provided invalid duration '{duration}' for /timeout on {member.name} (ID: {member.id}). Error: {e}"
+                f"{moderator.name} (ID: {moderator.id}) provided invalid duration '{duration}' for /timeout on {user.name} (ID: {user.id}). Error: {e}"
             )
             return
 
         timeout_until = datetime.now(timezone.utc) + delta
 
         try:
-            await member.edit(timeout=timeout_until, reason=reason)
+            await user.edit(timeout=timeout_until, reason=reason)
             embed = discord.Embed(
                 title="Member Timed Out",
-                description=f"{member.mention} has been timed out for **{duration}**.\n**Reason:** {reason}",
+                description=f"{user.mention} has been timed out for **{duration}**.\n**Reason:** {reason}",
                 color=discord.Color.green(),
             )
             await interaction.response.send_message(embed=embed)
             logging.info(
-                f"Timed out {member} until {timeout_until.isoformat()} for reason: {reason}"
+                f"Timed out {user} until {timeout_until.isoformat()} for reason: {reason}"
             )
             audit_log(
-                f"{moderator.name} (ID: {moderator.id}) successfully timed out {member.name} (ID: {member.id}) until {timeout_until.isoformat()} in guild '{interaction.guild.name}' (ID: {interaction.guild.id}) for reason: {reason}."
+                f"{moderator.name} (ID: {moderator.id}) successfully timed out {user.name} (ID: {user.id}) until {timeout_until.isoformat()} in guild '{interaction.guild.name}' (ID: {interaction.guild.id}) for reason: {reason}."
             )
         except Exception as e:
             logging.error(f"Error timing out member: {e}")
@@ -102,7 +102,7 @@ class Timeout(commands.Cog):
             )
             await interaction.response.send_message(embed=embed)
             audit_log(
-                f"{moderator.name} (ID: {moderator.id}) encountered error timing out {member.name} (ID: {member.id}) in guild '{interaction.guild.name}' (ID: {interaction.guild.id}): {e}"
+                f"{moderator.name} (ID: {moderator.id}) encountered error timing out {user.name} (ID: {user.id}) in guild '{interaction.guild.name}' (ID: {interaction.guild.id}): {e}"
             )
             return
 
@@ -115,8 +115,8 @@ class Timeout(commands.Cog):
             if logs_channel:
                 try:
                     await logs_channel.send(
-                        f"""**Username:** {member.mention}
-**User ID:** {member.id}
+                        f"""**Username:** {user.mention}
+**User ID:** {user.id}
 **Category of Discipline:** Timeout
 **Timespan of Discipline:** {duration}
 **Reason of Discipline:** {reason}
@@ -128,7 +128,7 @@ class Timeout(commands.Cog):
                         f"Timeout logged in '#{logs_channel.name}' (ID: {logs_channel.id})."
                     )
                     audit_log(
-                        f"{moderator.name} (ID: {moderator.id}) logged timeout for {member.name} (ID: {member.id}) in log channel #{logs_channel.name} (ID: {logs_channel.id})."
+                        f"{moderator.name} (ID: {moderator.id}) logged timeout for {user.name} (ID: {user.id}) in log channel #{logs_channel.name} (ID: {logs_channel.id})."
                     )
                     await interaction.followup.send(
                         embed=discord.Embed(
@@ -141,7 +141,7 @@ class Timeout(commands.Cog):
                 except discord.HTTPException as e:
                     logging.error(f"Error logging timeout: {e}")
                     audit_log(
-                        f"{moderator.name} (ID: {moderator.id}) encountered error logging timeout for {member.name} (ID: {member.id}) in log channel (ID: {logs_channel_id}): {e}"
+                        f"{moderator.name} (ID: {moderator.id}) encountered error logging timeout for {user.name} (ID: {user.id}) in log channel (ID: {logs_channel_id}): {e}"
                     )
                     await interaction.followup.send(
                         embed=discord.Embed(
@@ -154,18 +154,18 @@ class Timeout(commands.Cog):
             else:
                 logging.warning("Log channel not found; please check your config.")
                 audit_log(
-                    f"{moderator.name} (ID: {moderator.id}) could not log timeout for {member.name} (ID: {member.id}) because log channel with ID {logs_channel_id} was not found in guild '{guild.name}' (ID: {guild.id})."
+                    f"{moderator.name} (ID: {moderator.id}) could not log timeout for {user.name} (ID: {user.id}) because log channel with ID {logs_channel_id} was not found in guild '{guild.name}' (ID: {guild.id})."
                 )
         else:
             logging.warning("logs_channel_id not set in config.yaml.")
             audit_log(
-                f"{moderator.name} (ID: {moderator.id}) attempted to log timeout for {member.name} (ID: {member.id}) but no logs_channel_id was set in config.yaml."
+                f"{moderator.name} (ID: {moderator.id}) attempted to log timeout for {user.name} (ID: {user.id}) but no logs_channel_id was set in config.yaml."
             )
 
     @app_commands.command(
         name="untimeout", description="Remove the timeout from a member."
     )
-    async def untimeout(self, interaction: discord.Interaction, member: discord.Member):
+    async def untimeout(self, interaction: discord.Interaction, user: discord.Member):
         moderator = interaction.user
         if not moderator.guild_permissions.moderate_members:
             embed = discord.Embed(
@@ -180,16 +180,16 @@ class Timeout(commands.Cog):
             return
 
         try:
-            await member.edit(timeout=None, reason="Timeout removed by moderator.")
+            await user.edit(timeout=None, reason="Timeout removed by moderator.")
             embed = discord.Embed(
                 title="Timeout Removed",
-                description=f"Timeout has been removed from {member.mention}.",
+                description=f"Timeout has been removed from {user.mention}.",
                 color=discord.Color.green(),
             )
             await interaction.response.send_message(embed=embed)
-            logging.info(f"Removed timeout from {member}")
+            logging.info(f"Removed timeout from {user}")
             audit_log(
-                f"{moderator.name} (ID: {moderator.id}) removed timeout from {member.name} (ID: {member.id}) in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
+                f"{moderator.name} (ID: {moderator.id}) removed timeout from {user.name} (ID: {user.id}) in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
             )
         except Exception as e:
             logging.error(f"Error removing timeout: {e}")
@@ -200,7 +200,7 @@ class Timeout(commands.Cog):
             )
             await interaction.response.send_message(embed=embed)
             audit_log(
-                f"{moderator.name} (ID: {moderator.id}) encountered error removing timeout from {member.name} (ID: {member.id}) in guild '{interaction.guild.name}' (ID: {interaction.guild.id}): {e}"
+                f"{moderator.name} (ID: {moderator.id}) encountered error removing timeout from {user.name} (ID: {user.id}) in guild '{interaction.guild.name}' (ID: {interaction.guild.id}): {e}"
             )
 
 

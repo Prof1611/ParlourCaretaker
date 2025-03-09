@@ -28,7 +28,7 @@ class Ban(commands.Cog):
         name="ban", description="Bans a member and sends them a notice via DM."
     )
     async def ban(
-        self, interaction: discord.Interaction, member: discord.Member, *, reason: str
+        self, interaction: discord.Interaction, user: discord.Member, *, reason: str
     ):
         # Defer the response to avoid timeout errors
         await interaction.response.defer()
@@ -36,10 +36,10 @@ class Ban(commands.Cog):
         moderator = interaction.user  # actor performing the action
 
         try:
-            if member.id in self.config["owner_ids"]:
+            if user.id in self.config["owner_ids"]:
                 logging.error("Owner entered as victim.")
                 self.audit_log(
-                    f"Attempted ban on owner {member.name} (ID: {member.id}) by {moderator.name} (ID: {moderator.id}). Action aborted."
+                    f"Attempted ban on owner {user.name} (ID: {user.id}) by {moderator.name} (ID: {moderator.id}). Action aborted."
                 )
                 embed = discord.Embed(
                     title="Error",
@@ -52,25 +52,25 @@ class Ban(commands.Cog):
                 try:
                     dm_text = f"""**NOTICE: Permanent Ban from The Parlour Discord Server**
 
-Dear {member.mention},
+Dear {user.mention},
 
 We are writing to inform you that you have been permanently banned from The Parlour Discord server. This action is a result of your repeated violations of our community rules, despite previous warnings and attempts to rectify the situation.
 
 **Reason for Ban:** {reason}
 
-We take upholding the standards of our community very seriously, and continued disruptive or disrespectful behaviour will not be tolerated. This ban ensures a positive and respectful environment for all members.
+We take upholding the standards of our community very seriously, and continued disruptive or disrespectful behaviour will not be tolerated. This ban ensures a positive and respectful environment for all users.
 
 **Appeal Process:** If you wish to appeal this ban, you may do so by filling out the following form: https://forms.gle/Sn73Tvn7VJP2eiTD6
 
 Sincerely,
 The Parlour Moderation Team
 *Please do not reply to this message as the staff team will not see it.*"""
-                    await member.send(dm_text)
+                    await user.send(dm_text)
                     logging.info(
-                        f"Successfully sent permanent ban notice to {member.name} (ID: {member.id}) via DM."
+                        f"Successfully sent permanent ban notice to {user.name} (ID: {user.id}) via DM."
                     )
                     self.audit_log(
-                        f"{moderator.name} (ID: {moderator.id}) sent permanent ban notice via DM to {member.name} (ID: {member.id})."
+                        f"{moderator.name} (ID: {moderator.id}) sent permanent ban notice via DM to {user.name} (ID: {user.id})."
                     )
                 except discord.HTTPException as e:
                     if e.status == 403:  # DMs Disabled
@@ -78,7 +78,7 @@ The Parlour Moderation Team
                             f"DMs disabled when attempting to send ban notice via DM. Error: {e}"
                         )
                         self.audit_log(
-                            f"{moderator.name} (ID: {moderator.id}) failed to send DM notice to {member.name} (ID: {member.id}); DMs disabled."
+                            f"{moderator.name} (ID: {moderator.id}) failed to send DM notice to {user.name} (ID: {user.id}); DMs disabled."
                         )
                         embed = discord.Embed(
                             title="Error",
@@ -91,27 +91,27 @@ The Parlour Moderation Team
                             f"Error when attempting to send ban notice via DM: {e}"
                         )
                         self.audit_log(
-                            f"{moderator.name} (ID: {moderator.id}) error sending DM notice to {member.name} (ID: {member.id}): {e}"
+                            f"{moderator.name} (ID: {moderator.id}) error sending DM notice to {user.name} (ID: {user.id}): {e}"
                         )
                         embed = discord.Embed(
                             title="Error",
-                            description=f"Failed to send notice to {member.mention} via DM.",
+                            description=f"Failed to send notice to {user.mention} via DM.",
                             color=discord.Color.red(),
                         )
                         await interaction.followup.send(embed=embed)
                 try:
                     # Try ban the user from the server
-                    await member.ban(reason=reason, delete_message_days=0)
+                    await user.ban(reason=reason, delete_message_days=0)
                     guild = interaction.guild
                     logging.info(
-                        f"Permanently banned {member.name} (ID: {member.id}) from '{guild.name}' (ID: {guild.id})."
+                        f"Permanently banned {user.name} (ID: {user.id}) from '{guild.name}' (ID: {guild.id})."
                     )
                     self.audit_log(
-                        f"{moderator.name} (ID: {moderator.id}) permanently banned {member.name} (ID: {member.id}) from guild '{guild.name}' (ID: {guild.id}) for reason: {reason}."
+                        f"{moderator.name} (ID: {moderator.id}) permanently banned {user.name} (ID: {user.id}) from guild '{guild.name}' (ID: {guild.id}) for reason: {reason}."
                     )
                     embed = discord.Embed(
                         title="Member Banned",
-                        description=f"Permanently banned {member.mention} from the server and sent them a notice via DM.",
+                        description=f"Permanently banned {user.mention} from the server and sent them a notice via DM.",
                         color=discord.Color.green(),
                     )
                     await interaction.followup.send(embed=embed)
@@ -119,7 +119,7 @@ The Parlour Moderation Team
                     if e.status == 403:  # Bot has no permission to ban
                         logging.error(f"No permission to ban. Error: {e}")
                         self.audit_log(
-                            f"{moderator.name} (ID: {moderator.id}) failed to ban {member.name} (ID: {member.id}) - insufficient permissions in guild '{guild.name}' (ID: {guild.id})."
+                            f"{moderator.name} (ID: {moderator.id}) failed to ban {user.name} (ID: {user.id}) - insufficient permissions in guild '{guild.name}' (ID: {guild.id})."
                         )
                         embed = discord.Embed(
                             title="No Permission",
@@ -129,14 +129,14 @@ The Parlour Moderation Team
                         await interaction.followup.send(embed=embed)
                     else:
                         logging.error(
-                            f"Error when attempting to ban {member.name}. Error: {e}"
+                            f"Error when attempting to ban {user.name}. Error: {e}"
                         )
                         self.audit_log(
-                            f"{moderator.name} (ID: {moderator.id}) error banning {member.name} (ID: {member.id}) in guild '{guild.name}' (ID: {guild.id}): {e}"
+                            f"{moderator.name} (ID: {moderator.id}) error banning {user.name} (ID: {user.id}) in guild '{guild.name}' (ID: {guild.id}): {e}"
                         )
                         embed = discord.Embed(
                             title="Error",
-                            description=f"Failed to ban {member.mention}.",
+                            description=f"Failed to ban {user.mention}.",
                             color=discord.Color.red(),
                         )
                         await interaction.followup.send(embed=embed)
@@ -148,8 +148,8 @@ The Parlour Moderation Team
                 log_link = f"https://discord.com/channels/{guild.id}/{logs_channel_id}"
                 if logs_channel:
                     try:
-                        log_message = f"""**Username:** {member.mention}
-**User ID:** {member.id}
+                        log_message = f"""**Username:** {user.mention}
+**User ID:** {user.id}
 **Category of Discipline:** Permanent Ban
 **Timespan of Discipline:** Permanent
 **Reason of Discipline:** {reason}
@@ -161,7 +161,7 @@ The Parlour Moderation Team
                             f"Permanent ban logged in '#{logs_channel.name}' (ID: {logs_channel.id})."
                         )
                         self.audit_log(
-                            f"{moderator.name} (ID: {moderator.id}) logged permanent ban for {member.name} (ID: {member.id}) in log channel #{logs_channel.name} (ID: {logs_channel.id})."
+                            f"{moderator.name} (ID: {moderator.id}) logged permanent ban for {user.name} (ID: {user.id}) in log channel #{logs_channel.name} (ID: {logs_channel.id})."
                         )
                         embed = discord.Embed(
                             title="Action Logged",
@@ -175,7 +175,7 @@ The Parlour Moderation Team
                                 f"No access to '#{logs_channel.name}' (ID: {logs_channel.id}). Error: {e}"
                             )
                             self.audit_log(
-                                f"{moderator.name} (ID: {moderator.id}) failed to log action in log channel #{logs_channel.name} (ID: {logs_channel.id}) for {member.name} (ID: {member.id}); no access."
+                                f"{moderator.name} (ID: {moderator.id}) failed to log action in log channel #{logs_channel.name} (ID: {logs_channel.id}) for {user.name} (ID: {user.id}); no access."
                             )
                             embed = discord.Embed(
                                 title="No Access",
@@ -186,7 +186,7 @@ The Parlour Moderation Team
                         elif e.status == 404:
                             logging.error(f"Channel not found. Error: {e}")
                             self.audit_log(
-                                f"{moderator.name} (ID: {moderator.id}) failed to log action; log channel not found for {member.name} (ID: {member.id})."
+                                f"{moderator.name} (ID: {moderator.id}) failed to log action; log channel not found for {user.name} (ID: {user.id})."
                             )
                             embed = discord.Embed(
                                 title="Error",
@@ -197,7 +197,7 @@ The Parlour Moderation Team
                         elif e.status == 429:
                             logging.error(f"RATE LIMIT. Error: {e}")
                             self.audit_log(
-                                f"{moderator.name} (ID: {moderator.id}) encountered rate limit when logging ban for {member.name} (ID: {member.id})."
+                                f"{moderator.name} (ID: {moderator.id}) encountered rate limit when logging ban for {user.name} (ID: {user.id})."
                             )
                             embed = discord.Embed(
                                 title="Error",
@@ -208,7 +208,7 @@ The Parlour Moderation Team
                         elif e.status in {500, 502, 503, 504}:
                             logging.error(f"Discord API Error. Error: {e}")
                             self.audit_log(
-                                f"{moderator.name} (ID: {moderator.id}) encountered Discord API error when logging ban for {member.name} (ID: {member.id}): {e}"
+                                f"{moderator.name} (ID: {moderator.id}) encountered Discord API error when logging ban for {user.name} (ID: {user.id}): {e}"
                             )
                             embed = discord.Embed(
                                 title="Error",
@@ -221,7 +221,7 @@ The Parlour Moderation Team
                                 f"Failed to log ban in '#{logs_channel.name}' (ID: {logs_channel.id}). Error: {e}"
                             )
                             self.audit_log(
-                                f"{moderator.name} (ID: {moderator.id}) unknown error when logging ban for {member.name} (ID: {member.id}) in log channel #{logs_channel.name} (ID: {logs_channel.id}): {e}"
+                                f"{moderator.name} (ID: {moderator.id}) unknown error when logging ban for {user.name} (ID: {user.id}) in log channel #{logs_channel.name} (ID: {logs_channel.id}): {e}"
                             )
                             embed = discord.Embed(
                                 title="Error",
@@ -232,11 +232,11 @@ The Parlour Moderation Team
         except discord.HTTPException as e:
             logging.error(f"Error when attempting to ban: {e}")
             self.audit_log(
-                f"{moderator.name} (ID: {moderator.id}) critical error: Failed to ban and send notice to {member.name} (ID: {member.id}): {e}"
+                f"{moderator.name} (ID: {moderator.id}) critical error: Failed to ban and send notice to {user.name} (ID: {user.id}): {e}"
             )
             embed = discord.Embed(
                 title="Error",
-                description=f"Failed to ban and send notice to {member.mention}. Error: {e}",
+                description=f"Failed to ban and send notice to {user.mention}. Error: {e}",
                 color=discord.Color.red(),
             )
             await interaction.followup.send(embed=embed)

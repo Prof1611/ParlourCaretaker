@@ -35,23 +35,24 @@ The Parlour Caretaker is a custom Discord bot designed to assist with moderation
   - **`/ban [user] [reason]`** – Permanently bans a user and sends them a DM with the reason.
   - **`/tempban [user] [duration] [reason]`** – Temporarily bans a user for a specified duration and sends them a DM with the reason.
   - **`/kick [user] [reason]`** – Kicks a user and sends them a DM with the reason.
-  - **`/timeout [user] [duration] [reason]`** – Times out a member for a specified duration and logs the action.
+  - **`/timeout [user] [duration] [reason (optional)]`** – Set a timeout for a member for a specified duration with an optional reason.
+  - **`/untimeout [user]`** – Removes a timeout from a user.
   
 - **Utility Commands:**  
-  - **`/dm [user] [message]`** – Sends a custom direct message to a specified user.
-  - **`/message`** – Posts a custom message in a chosen channel via a modal form.
+  - **`/dm [user]`** – Sends a custom direct message to a specified user.
+  - **`/message [channel]`** – Posts a custom message in a chosen channel.
   - **`/setsticky`** – Sets a sticky message in the current channel that remains at the bottom.
   - **`/removesticky`** – Removes the sticky message from the current channel.
 
 - **Miscellaneous Commands:**  
-  - **`/gamesnight [message]`** – Sends a games night announcement in the #parlour-games channel.
+  - **`/gamesnight`** – Sends a games night announcement in the #parlour-games channel.
   - **`/scrape`** – Checks the band’s website for new shows and updates the #gig-chats channel.
 
 - **Roulette Game:**  
   - **`/roulette`** – Roll for your fate in the Nothing Matters Roulette game!
   - **`/roulette_stats`** – Check your individual roulette game statistics.
   - **`/roulette_leaderboard`** – Display the top 10 players in the roulette game.
-  - **`/roulette_update`** – Manually adjust a player's roulette stats.
+  - **`/roulette_update [user] [wins] [losses] [streak] [plays]`** – Manually adjust a player's roulette stats.
   - **`/roulette_global_stats`** – Display global roulette statistics, outcome probabilities, and future projections.
 
 ## Configuration

@@ -87,7 +87,7 @@ class TempBan(commands.Cog):
     async def tempban(
         self,
         interaction: discord.Interaction,
-        member: discord.Member,
+        user: discord.Member,
         duration: str,
         *,
         reason: str,
@@ -96,7 +96,7 @@ class TempBan(commands.Cog):
 
         # Log the invocation of the command.
         audit_log(
-            f"{moderator.name} (ID: {moderator.id}) invoked /tempban for {member.name} (ID: {member.id}) with duration '{duration}' in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
+            f"{moderator.name} (ID: {moderator.id}) invoked /tempban for {user.name} (ID: {user.id}) with duration '{duration}' in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
         )
 
         if not interaction.user.guild_permissions.ban_members:
@@ -119,7 +119,7 @@ class TempBan(commands.Cog):
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
             audit_log(
-                f"{moderator.name} (ID: {moderator.id}) provided invalid duration '{duration}' for /tempban on {member.name} (ID: {member.id})."
+                f"{moderator.name} (ID: {moderator.id}) provided invalid duration '{duration}' for /tempban on {user.name} (ID: {user.id})."
             )
             return
 
@@ -129,7 +129,7 @@ class TempBan(commands.Cog):
 
         dm_message = f"""**NOTICE: Temporary Ban from The Parlour Discord Server**
 
-Dear {member.display_name},
+Dear {user.display_name},
 
 We are writing to inform you that you have been temporarily banned from The Parlour Discord server for **{duration}**.
 
@@ -149,46 +149,46 @@ The Parlour Moderation Team
 *Please do not reply to this message as the staff team will not see it.*"""
 
         try:
-            await member.send(dm_message)
+            await user.send(dm_message)
             logging.info(
-                f"Successfully sent temporary ban notice to {member.name} (ID: {member.id}) via DM."
+                f"Successfully sent temporary ban notice to {user.name} (ID: {user.id}) via DM."
             )
             audit_log(
-                f"{moderator.name} (ID: {moderator.id}) sent temporary ban DM notice to {member.name} (ID: {member.id})."
+                f"{moderator.name} (ID: {moderator.id}) sent temporary ban DM notice to {user.name} (ID: {user.id})."
             )
         except discord.Forbidden:
             logging.warning(
-                f"Failed to send a DM to {member.name} (ID: {member.id}). They might have DMs disabled."
+                f"Failed to send a DM to {user.name} (ID: {user.id}). They might have DMs disabled."
             )
             await interaction.response.send_message(
                 embed=discord.Embed(
                     title="Warning",
-                    description=f"Could not send a DM to {member.mention}. They may have DMs disabled.",
+                    description=f"Could not send a DM to {user.mention}. They may have DMs disabled.",
                     color=discord.Color.orange(),
                 ),
                 ephemeral=True,
             )
             audit_log(
-                f"{moderator.name} (ID: {moderator.id}) failed to send DM notice to {member.name} (ID: {member.id}) due to DMs being disabled."
+                f"{moderator.name} (ID: {moderator.id}) failed to send DM notice to {user.name} (ID: {user.id}) due to DMs being disabled."
             )
 
-        await interaction.guild.ban(member, reason=reason, delete_message_days=0)
+        await interaction.guild.ban(user, reason=reason, delete_message_days=0)
         logging.info(
-            f"Temporarily banned {member.name} (ID: {member.id}) from '{interaction.guild.name}' (ID: {interaction.guild.id}) for '{duration}'."
+            f"Temporarily banned {user.name} (ID: {user.id}) from '{interaction.guild.name}' (ID: {interaction.guild.id}) for '{duration}'."
         )
         audit_log(
-            f"{moderator.name} (ID: {moderator.id}) temporarily banned {member.name} (ID: {member.id}) from guild '{interaction.guild.name}' (ID: {interaction.guild.id}) for duration '{duration}' with reason: {reason}."
+            f"{moderator.name} (ID: {moderator.id}) temporarily banned {user.name} (ID: {user.id}) from guild '{interaction.guild.name}' (ID: {interaction.guild.id}) for duration '{duration}' with reason: {reason}."
         )
 
         embed = discord.Embed(
             title="Member Banned",
-            description=f"Temporarily banned {member.mention} for **{duration}**.\n\n**Reason:**\n{reason}",
+            description=f"Temporarily banned {user.mention} for **{duration}**.\n\n**Reason:**\n{reason}",
             color=discord.Color.green(),
         )
         await interaction.response.send_message(embed=embed)
 
         # Store the ban in the database.
-        self.add_ban(member.id, member.name, interaction.guild.id, unban_time)
+        self.add_ban(user.id, user.name, interaction.guild.id, unban_time)
 
         # --- Log the moderation action in the log channel ---
         logs_channel_id = self.config.get("logs_channel_id")
@@ -200,8 +200,8 @@ The Parlour Moderation Team
             if logs_channel:
                 try:
                     await logs_channel.send(
-                        f"""**Username:** {member.mention}
-**User ID:** {member.id}
+                        f"""**Username:** {user.mention}
+**User ID:** {user.id}
 **Category of Discipline:** Temporary Ban
 **Timespan of Discipline:** {duration}
 **Reason of Discipline:** {reason}
@@ -213,7 +213,7 @@ The Parlour Moderation Team
                         f"Temporary ban logged in '#{logs_channel.name}' (ID: {logs_channel.id})."
                     )
                     audit_log(
-                        f"{moderator.name} (ID: {moderator.id}) logged temporary ban for {member.name} (ID: {member.id}) in log channel #{logs_channel.name} (ID: {logs_channel.id})."
+                        f"{moderator.name} (ID: {moderator.id}) logged temporary ban for {user.name} (ID: {user.id}) in log channel #{logs_channel.name} (ID: {logs_channel.id})."
                     )
                     embed = discord.Embed(
                         title="Action Logged",
@@ -224,7 +224,7 @@ The Parlour Moderation Team
                 except discord.HTTPException as e:
                     logging.error(f"Error logging temporary ban: {e}")
                     audit_log(
-                        f"{moderator.name} (ID: {moderator.id}) encountered error when logging temporary ban for {member.name} (ID: {member.id}) in log channel (ID: {logs_channel_id}): {e}"
+                        f"{moderator.name} (ID: {moderator.id}) encountered error when logging temporary ban for {user.name} (ID: {user.id}) in log channel (ID: {logs_channel_id}): {e}"
                     )
                     await interaction.followup.send(
                         embed=discord.Embed(
@@ -237,12 +237,12 @@ The Parlour Moderation Team
             else:
                 logging.warning("Log channel not found; please check your config.")
                 audit_log(
-                    f"{moderator.name} (ID: {moderator.id}) could not log temporary ban for {member.name} (ID: {member.id}) because log channel with ID {logs_channel_id} was not found in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
+                    f"{moderator.name} (ID: {moderator.id}) could not log temporary ban for {user.name} (ID: {user.id}) because log channel with ID {logs_channel_id} was not found in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
                 )
         else:
             logging.warning("logs_channel_id not set in config.yaml.")
             audit_log(
-                f"{moderator.name} (ID: {moderator.id}) attempted to log temporary ban for {member.name} (ID: {member.id}) but no logs_channel_id was set in config.yaml."
+                f"{moderator.name} (ID: {moderator.id}) attempted to log temporary ban for {user.name} (ID: {user.id}) but no logs_channel_id was set in config.yaml."
             )
 
     @tasks.loop(seconds=15)
