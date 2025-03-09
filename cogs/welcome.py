@@ -68,7 +68,7 @@ class Welcome(commands.Cog):
                 ),
             )
             logging.info(
-                f"Welcome embed sent for '{member.name}' (ID: {member.id}) in channel #{channel.name} (ID: {channel.id})."
+                f"Welcome embed sent for '{member.name}' in channel #{channel.name}."
             )
             audit_log(
                 f"Sent welcome message for {member.name} (ID: {member.id}) in channel #{channel.name} (ID: {channel.id}) in guild '{guild.name}' (ID: {guild.id})."
