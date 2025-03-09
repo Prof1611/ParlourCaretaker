@@ -7,6 +7,7 @@ import yaml
 import asyncio
 import logging
 from dotenv import load_dotenv
+import datetime
 
 # Load environment variables from .env file
 load_dotenv()
@@ -14,7 +15,6 @@ load_dotenv()
 
 # Define ANSI escape sequences for colours
 class CustomFormatter(logging.Formatter):
-
     LEVEL_COLOURS = {
         logging.DEBUG: "\033[0;36m",  # Cyan
         logging.INFO: "\033[0;32m",  # Green
@@ -41,6 +41,14 @@ formatter = CustomFormatter(
 handler = logging.StreamHandler()
 handler.setFormatter(formatter)
 logging.basicConfig(level=logging.INFO, handlers=[handler])
+
+
+# Audit log function to write events to audit.log
+def audit_log(message: str):
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open("audit.log", "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {message}\n")
+
 
 # Load the config file (UTF-8 for emojis, etc.)
 with open("config.yaml", "r", encoding="utf-8") as config_file:
@@ -78,17 +86,18 @@ async def change_bot_status():
 @bot.event
 async def on_ready():
     logging.info(f"Successfully logged in as \033[96m{bot.user}\033[0m")
-
+    audit_log(f"Bot logged in as {bot.user} (ID: {bot.user.id}).")
     # Start the status rotation if not already running
     if not change_bot_status.is_running():
         change_bot_status.start()
-
     # Sync slash commands
     try:
         synced_commands = await bot.tree.sync()
         logging.info(f"Successfully synced {len(synced_commands)} commands.")
+        audit_log(f"Successfully synced {len(synced_commands)} slash commands.")
     except Exception as e:
         logging.error(f"Error syncing application commands: {e}")
+        audit_log(f"Error syncing slash commands: {e}")
 
 
 @bot.event
@@ -102,9 +111,7 @@ async def on_message(message):
 
     # Check if this is a DM
     if isinstance(message.channel, discord.DMChannel):
-        # Directly use the stored dm_forward_channel_id
         target_channel = bot.get_channel(dm_forward_channel_id)
-
         if target_channel:
             try:
                 embed = discord.Embed(
@@ -116,10 +123,17 @@ async def on_message(message):
                 logging.info(
                     f"DM from {message.author} forwarded to #{target_channel.name}"
                 )
+                audit_log(
+                    f"DM from {message.author} (ID: {message.author.id}) forwarded to channel #{target_channel.name} (ID: {target_channel.id})."
+                )
             except discord.HTTPException as e:
                 logging.error(f"Error forwarding DM: {e}")
+                audit_log(
+                    f"Error forwarding DM from {message.author} (ID: {message.author.id}): {e}"
+                )
         else:
             logging.error("Target channel not found for DM forwarding.")
+            audit_log("Failed to forward DM: target channel not found.")
 
 
 # Load all cogs
@@ -128,6 +142,7 @@ async def load_cogs():
     for filename in os.listdir("./cogs"):
         if filename.endswith(".py"):
             await bot.load_extension(f"cogs.{filename[:-3]}")
+            audit_log(f"Loaded cog: {filename[:-3]}")
 
 
 async def main():
