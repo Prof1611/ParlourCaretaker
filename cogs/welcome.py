@@ -54,7 +54,7 @@ class Welcome(commands.Cog):
             title="Welcome to The Parlour",
             description=(
                 f"Welcome {member.mention}! Retire with us to the parlour for after dinner games in celebrations of our hosts, The Last Dinner Party.\n\n"
-                "Make sure to check out <#1346179590795559047> for our server info 🏹"
+                "Make sure to check out <#1174309687324315679> for our server info 🏹"
             ),
             color=discord.Color.dark_red(),
         )
