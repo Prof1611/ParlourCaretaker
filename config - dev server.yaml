@@ -39,6 +39,7 @@ dm_forward_channel_id: 1161423690517463164  # Channel for forwarding direct mess
 games_channel_id: 1281260171754082430     # Channel for sending games night announcements.
 gigchats_id: 1302737683537334332           # Channel for gig chats forum.
 welcome_channel_id: 1346179245923106907    # Channel where welcome messages are posted.
+new_member_channel_id: 1346179590795559047        # Channel where new members are directed.
 
 # --------------------------
 # Role Settings

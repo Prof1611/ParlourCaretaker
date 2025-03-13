@@ -39,6 +39,7 @@ dm_forward_channel_id: 1239669255012614267    # Channel for forwarding direct me
 games_channel_id: 1159782202985426964         # Channel for sending games night announcements.
 gigchats_id: 1195097407604666399               # Channel for gig chats forum.
 welcome_channel_id: 1151864993571160135        # Channel where welcome messages are posted.
+new_member_channel_id: 1174309687324315679        # Channel where new members are directed.
 
 # --------------------------
 # Role Settings
@@ -51,7 +52,7 @@ dinner_guest_role_id: 1151863422133227594      # Role ID for dinner guests.
 # Feature Toggles
 # --------------------------
 # Enable or disable specific features. Set to 'true' to enable the feature.
-welcome_enabled: true    # Set to true to enable welcome messages.
+welcome_enabled: true     # Set to true to enable welcome messages.
 autorole_enabled: true    # Set to true to enable auto role assignment.
 
 # --------------------------

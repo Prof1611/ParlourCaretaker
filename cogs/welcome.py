@@ -20,6 +20,7 @@ class Welcome(commands.Cog):
             self.config = yaml.safe_load(config_file)
         # Get the welcome channel ID and check if welcome messages are enabled.
         self.welcome_channel_id = self.config.get("welcome_channel_id")
+        self.new_member_channel_id = self.config.get("new_member_channel_id")
         self.welcome_enabled = self.config.get("welcome_enabled", True)
         # Set the local welcome image path
         self.welcome_image_path = "welcome-image.jpg"
@@ -53,8 +54,8 @@ class Welcome(commands.Cog):
         embed = discord.Embed(
             title="Welcome to The Parlour",
             description=(
-                f"Welcome {member.mention}! Retire with us to the parlour for after dinner games in celebrations of our hosts, The Last Dinner Party.\n\n"
-                "Make sure to check out <#1174309687324315679> for our server info 🏹"
+                f"Welcome {member.mention}! Retire with us to the parlour for after-dinner games in celebration of our hosts, The Last Dinner Party.\n\n"
+                f"Make sure to check out <#{self.new_member_channel_id}> for our server info 🏹"
             ),
             color=discord.Color.dark_red(),
         )
