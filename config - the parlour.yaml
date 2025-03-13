@@ -51,7 +51,7 @@ dinner_guest_role_id: 1151863422133227594      # Role ID for dinner guests.
 # Feature Toggles
 # --------------------------
 # Enable or disable specific features. Set to 'true' to enable the feature.
-welcome_enabled: false     # Set to true to enable welcome messages.
+welcome_enabled: true     # Set to true to enable welcome messages.
 autorole_enabled: true    # Set to true to enable auto role assignment.
 
 # --------------------------
