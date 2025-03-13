@@ -145,6 +145,25 @@ class AutoRole(commands.Cog):
                 f"Unexpected error: Failed to assign roles to '@{member.name}' in guild '{member.guild.name}' (ID: {member.guild.id}): {e}"
             )
 
+    @commands.Cog.listener()
+    async def on_member_remove(self, member: discord.Member):
+        """
+        When a member leaves the server, remove any scheduled role removals
+        for that member from the database.
+        """
+        with self.db:
+            # Remove all scheduled role removals for the leaving member.
+            self.db.execute(
+                "DELETE FROM scheduled_role_removals WHERE guild_id = ? AND member_id = ?",
+                (member.guild.id, member.id),
+            )
+        logging.info(
+            f"Removed scheduled role removals for member '@{member.name}' (ID: {member.id}) as they left guild '{member.guild.name}'."
+        )
+        audit_log(
+            f"Removed scheduled role removals for member '@{member.name}' (ID: {member.id}) in guild '{member.guild.name}' (ID: {member.guild.id}) due to member departure."
+        )
+
     @tasks.loop(seconds=15)
     async def check_roles(self):
         """Background task that periodically checks the database for scheduled role removals."""

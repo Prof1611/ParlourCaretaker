@@ -8,18 +8,20 @@ from discord.ext import commands
 from discord import app_commands
 import datetime
 
-# Database setup – using the same database file for both cogs.
+# Database setup – now with a guild_id column to separate stats per server.
 conn = sqlite3.connect("database.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute(
     """
     CREATE TABLE IF NOT EXISTS roulette_players (
-        user_id INTEGER PRIMARY KEY,
+        guild_id INTEGER,
+        user_id INTEGER,
         username TEXT,
         wins INTEGER DEFAULT 0,
         losses INTEGER DEFAULT 0,
         streak INTEGER DEFAULT 0,
-        plays INTEGER DEFAULT 0
+        plays INTEGER DEFAULT 0,
+        PRIMARY KEY (guild_id, user_id)
     )
     """
 )
@@ -46,7 +48,9 @@ class MysteryView(discord.ui.View):
     ):
         outcome, fate, embed_color = self.cog.get_roulette_outcome()
         user_id = interaction.user.id
-        self.cog.update_stats(user_id, outcome, interaction.user.display_name)
+        self.cog.update_stats(
+            interaction.guild.id, user_id, outcome, interaction.user.display_name
+        )
         embed = discord.Embed(
             title="🎲 Nothing Matters Roulette 🎲",
             description=f"{fate}",
@@ -102,7 +106,6 @@ class Roulette(commands.Cog):
             raise
 
     def get_roulette_outcome(self):
-        # Use the probabilities from config (or default equal weights)
         outcomes = ["win", "loss", "mystery"]
         weights = [
             self.probabilities.get("win", 1),
@@ -122,10 +125,11 @@ class Roulette(commands.Cog):
         return fate_type, fate, embed_color
 
     async def stats_callback(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id
         user_id = interaction.user.id
         cursor.execute(
-            "SELECT wins, losses, streak, plays FROM roulette_players WHERE user_id = ?",
-            (user_id,),
+            "SELECT wins, losses, streak, plays FROM roulette_players WHERE guild_id = ? AND user_id = ?",
+            (guild_id, user_id),
         )
         result = cursor.fetchone()
         if result:
@@ -154,7 +158,7 @@ class Roulette(commands.Cog):
         else:
             embed = discord.Embed(
                 title="No Data Found",
-                description="You haven't played yet! Use `/roulette` to start your journey.",
+                description="You haven't played yet! Use /roulette to start your journey.",
                 color=discord.Color.red(),
             )
         await interaction.response.send_message(embed=embed)
@@ -163,8 +167,10 @@ class Roulette(commands.Cog):
         )
 
     async def leaderboard_callback(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id
         cursor.execute(
-            "SELECT user_id, username, wins, plays FROM roulette_players ORDER BY wins DESC LIMIT 10"
+            "SELECT user_id, username, wins, plays FROM roulette_players WHERE guild_id = ? ORDER BY wins DESC LIMIT 10",
+            (guild_id,),
         )
         results = cursor.fetchall()
         if results:
@@ -196,13 +202,14 @@ class Roulette(commands.Cog):
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def roulette(self, interaction: discord.Interaction) -> None:
         actor = interaction.user
+        guild_id = interaction.guild.id
         audit_log(
-            f"{actor.name} (ID: {actor.id}) invoked /roulette in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
+            f"{actor.name} (ID: {actor.id}) invoked /roulette in guild '{interaction.guild.name}' (ID: {guild_id})."
         )
         try:
             user_id = actor.id
             outcome, fate, embed_color = self.get_roulette_outcome()
-            self.update_stats(user_id, outcome, actor.display_name)
+            self.update_stats(guild_id, user_id, outcome, actor.display_name)
             audit_log(
                 f"{actor.name} (ID: {actor.id}) rolled {outcome.upper()} and received outcome: {fate}."
             )
@@ -238,14 +245,15 @@ class Roulette(commands.Cog):
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def stats(self, interaction: discord.Interaction) -> None:
         actor = interaction.user
+        guild_id = interaction.guild.id
         audit_log(
-            f"{actor.name} (ID: {actor.id}) invoked /roulette_stats in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
+            f"{actor.name} (ID: {actor.id}) invoked /roulette_stats in guild '{interaction.guild.name}' (ID: {guild_id})."
         )
         try:
             user_id = actor.id
             cursor.execute(
-                "SELECT wins, losses, streak, plays FROM roulette_players WHERE user_id = ?",
-                (user_id,),
+                "SELECT wins, losses, streak, plays FROM roulette_players WHERE guild_id = ? AND user_id = ?",
+                (guild_id, user_id),
             )
             result = cursor.fetchone()
             if result:
@@ -275,7 +283,7 @@ class Roulette(commands.Cog):
             else:
                 embed = discord.Embed(
                     title="No Data Found",
-                    description="You haven't played yet! Use `/roulette` to start your journey.",
+                    description="You haven't played yet! Use /roulette to start your journey.",
                     color=discord.Color.red(),
                 )
             await interaction.response.send_message(embed=embed)
@@ -301,12 +309,14 @@ class Roulette(commands.Cog):
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def leaderboard(self, interaction: discord.Interaction) -> None:
         actor = interaction.user
+        guild_id = interaction.guild.id
         audit_log(
-            f"{actor.name} (ID: {actor.id}) invoked /roulette_leaderboard in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
+            f"{actor.name} (ID: {actor.id}) invoked /roulette_leaderboard in guild '{interaction.guild.name}' (ID: {guild_id})."
         )
         try:
             cursor.execute(
-                "SELECT user_id, username, wins, plays FROM roulette_players ORDER BY wins DESC LIMIT 10"
+                "SELECT user_id, username, wins, plays FROM roulette_players WHERE guild_id = ? ORDER BY wins DESC LIMIT 10",
+                (guild_id,),
             )
             results = cursor.fetchall()
             if results:
@@ -362,11 +372,11 @@ class Roulette(commands.Cog):
         streak: int,
         plays: int,
     ) -> None:
-        """Allows adjustment of a player's stats."""
         try:
+            guild_id = interaction.guild.id
             cursor.execute(
-                "REPLACE INTO roulette_players (user_id, username, wins, losses, streak, plays) VALUES (?, ?, ?, ?, ?, ?)",
-                (target.id, target.display_name, wins, losses, streak, plays),
+                "REPLACE INTO roulette_players (guild_id, user_id, username, wins, losses, streak, plays) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (guild_id, target.id, target.display_name, wins, losses, streak, plays),
             )
             conn.commit()
             embed = discord.Embed(
@@ -378,7 +388,7 @@ class Roulette(commands.Cog):
             )
             await interaction.response.send_message(embed=embed)
             audit_log(
-                f"{interaction.user.name} (ID: {interaction.user.id}) updated stats for {target.display_name} (ID: {target.id}) to Wins: {wins}, Losses: {losses}, Streak: {streak}, Plays: {plays}."
+                f"{interaction.user.name} (ID: {interaction.user.id}) updated stats for {target.display_name} (ID: {target.id}) in guild ID {guild_id} to Wins: {wins}, Losses: {losses}, Streak: {streak}, Plays: {plays}."
             )
         except Exception as e:
             logging.error(f"Error updating stats via command: {e}")
@@ -397,14 +407,17 @@ class Roulette(commands.Cog):
         description="Display global roulette statistics, outcome probabilities, and future projections.",
     )
     async def global_stats(self, interaction: discord.Interaction):
-        """Shows overall game statistics along with outcome probabilities and projections for future plays."""
         try:
+            guild_id = interaction.guild.id
             cursor.execute(
-                "SELECT SUM(wins), SUM(losses), SUM(plays) FROM roulette_players"
+                "SELECT SUM(wins), SUM(losses), SUM(plays) FROM roulette_players WHERE guild_id = ?",
+                (guild_id,),
             )
             result = cursor.fetchone()
             total_wins, total_losses, total_plays = result if result else (0, 0, 0)
-            cursor.execute("SELECT COUNT(*) FROM roulette_players")
+            cursor.execute(
+                "SELECT COUNT(*) FROM roulette_players WHERE guild_id = ?", (guild_id,)
+            )
             total_players = cursor.fetchone()[0]
 
             if total_plays == 0:
@@ -456,7 +469,7 @@ class Roulette(commands.Cog):
             )
             await interaction.response.send_message(embed=embed)
             audit_log(
-                f"{interaction.user.name} (ID: {interaction.user.id}) viewed global roulette statistics."
+                f"{interaction.user.name} (ID: {interaction.user.id}) viewed global roulette statistics in guild ID {guild_id}."
             )
         except Exception as e:
             logging.error(f"Error fetching global statistics: {e}")
@@ -470,11 +483,13 @@ class Roulette(commands.Cog):
             )
             await interaction.response.send_message(embed=error_embed)
 
-    def update_stats(self, user_id: int, outcome: str, username: str) -> None:
+    def update_stats(
+        self, guild_id: int, user_id: int, outcome: str, username: str
+    ) -> None:
         try:
             cursor.execute(
-                "SELECT wins, losses, streak, plays FROM roulette_players WHERE user_id = ?",
-                (user_id,),
+                "SELECT wins, losses, streak, plays FROM roulette_players WHERE guild_id = ? AND user_id = ?",
+                (guild_id, user_id),
             )
             result = cursor.fetchone()
             if result:
@@ -489,15 +504,17 @@ class Roulette(commands.Cog):
                 losses += 1
                 streak = streak - 1 if streak <= 0 else -1
             cursor.execute(
-                "REPLACE INTO roulette_players (user_id, username, wins, losses, streak, plays) VALUES (?, ?, ?, ?, ?, ?)",
-                (user_id, username, wins, losses, streak, plays),
+                "REPLACE INTO roulette_players (guild_id, user_id, username, wins, losses, streak, plays) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (guild_id, user_id, username, wins, losses, streak, plays),
             )
             conn.commit()
         except Exception as e:
             logging.error(
-                f"Discord API Error. Error updating stats for user {user_id}: {e}"
+                f"Discord API Error. Error updating stats for user {user_id} in guild {guild_id}: {e}"
             )
-            audit_log(f"Error updating stats for user ID {user_id}: {e}")
+            audit_log(
+                f"Error updating stats for user ID {user_id} in guild {guild_id}: {e}"
+            )
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
