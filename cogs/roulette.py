@@ -156,10 +156,15 @@ class Roulette(commands.Cog):
             embed.add_field(name="🔥 Streak", value=streak_display, inline=False)
             embed.set_footer(text="Keep spinning your fate and chase those wins!")
         else:
+            # Even when there's no data, show the user's name and avatar.
             embed = discord.Embed(
-                title="No Data Found",
+                title=f"📊 {interaction.user.display_name}'s Roulette Stats 📊",
                 description="You haven't played yet! Use /roulette to start your journey.",
                 color=discord.Color.red(),
+            )
+            embed.set_author(
+                name=interaction.user.display_name,
+                icon_url=interaction.user.display_avatar.url,
             )
         await interaction.response.send_message(embed=embed)
         audit_log(
@@ -281,10 +286,14 @@ class Roulette(commands.Cog):
                 embed.add_field(name="🔥 Streak", value=streak_display, inline=False)
                 embed.set_footer(text="Keep spinning your fate and chase those wins!")
             else:
+                # Even when there's no data, show the user's name and avatar.
                 embed = discord.Embed(
-                    title="No Data Found",
+                    title=f"📊 {actor.display_name}'s Roulette Stats 📊",
                     description="You haven't played yet! Use /roulette to start your journey.",
                     color=discord.Color.red(),
+                )
+                embed.set_author(
+                    name=actor.display_name, icon_url=actor.display_avatar.url
                 )
             await interaction.response.send_message(embed=embed)
         except Exception as e:
@@ -403,10 +412,10 @@ class Roulette(commands.Cog):
             await interaction.response.send_message(embed=error_embed)
 
     @app_commands.command(
-        name="roulette_global_stats",
-        description="Display global roulette statistics, outcome probabilities, and future projections.",
+        name="roulette_server_stats",
+        description="Display server-specific roulette statistics, outcome probabilities, and future projections.",
     )
-    async def global_stats(self, interaction: discord.Interaction):
+    async def server_stats(self, interaction: discord.Interaction):
         try:
             guild_id = interaction.guild.id
             cursor.execute(
@@ -422,8 +431,8 @@ class Roulette(commands.Cog):
 
             if total_plays == 0:
                 embed = discord.Embed(
-                    title="Global Roulette Statistics",
-                    description="No data available yet. Start playing to generate statistics!",
+                    title="Server Roulette Statistics",
+                    description="No data available yet for this server. Start playing to generate statistics!",
                     color=discord.Color.red(),
                 )
                 await interaction.response.send_message(embed=embed)
@@ -440,7 +449,7 @@ class Roulette(commands.Cog):
             projected_mystery = mystery_prob * future_plays
 
             embed = discord.Embed(
-                title="🌐 Global Roulette Statistics 🌐",
+                title="🏰 Server Roulette Statistics 🏰",
                 color=discord.Color.blurple(),
             )
             embed.add_field(name="Total Plays", value=total_plays, inline=False)
@@ -465,20 +474,20 @@ class Roulette(commands.Cog):
                 inline=False,
             )
             embed.set_footer(
-                text="These projections are based on current outcome probabilities."
+                text="These projections are based on the current outcome probabilities in this server."
             )
             await interaction.response.send_message(embed=embed)
             audit_log(
-                f"{interaction.user.name} (ID: {interaction.user.id}) viewed global roulette statistics in guild ID {guild_id}."
+                f"{interaction.user.name} (ID: {interaction.user.id}) viewed server-specific roulette statistics in guild ID {guild_id}."
             )
         except Exception as e:
-            logging.error(f"Error fetching global statistics: {e}")
+            logging.error(f"Error fetching server statistics: {e}")
             audit_log(
-                f"Error in /roulette_global_stats by {interaction.user.name} (ID: {interaction.user.id}): {e}"
+                f"Error in /roulette_server_stats by {interaction.user.name} (ID: {interaction.user.id}): {e}"
             )
             error_embed = discord.Embed(
                 title="❌ Error",
-                description="Failed to retrieve global statistics. Please try again later.",
+                description="Failed to retrieve server statistics. Please try again later.",
                 color=discord.Color.red(),
             )
             await interaction.response.send_message(embed=error_embed)
