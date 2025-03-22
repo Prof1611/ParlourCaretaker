@@ -16,7 +16,6 @@ import platform
 
 
 def audit_log(message: str):
-    """Append a timestamped message to the audit log file."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open("audit.log", "a", encoding="utf-8") as f:
         f.write(f"[{timestamp}] {message}\n")
@@ -25,7 +24,6 @@ def audit_log(message: str):
 class Scrape(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Load the config file with UTF-8 encoding to handle special characters like emoji.
         with open("config.yaml", "r", encoding="utf-8") as config_file:
             self.config = yaml.safe_load(config_file)
 
@@ -93,8 +91,10 @@ class Scrape(commands.Cog):
         driver = None
         try:
             if system_os == "Windows":
+                driver_path = ChromeDriverManager().install()
+                os.chmod(driver_path, 0o755)
                 driver = webdriver.Chrome(
-                    service=Service(ChromeDriverManager().install()),
+                    service=Service(driver_path),
                     options=chrome_options,
                 )
             elif system_os == "Linux" and arch in ["arm64", "aarch64"]:
@@ -103,11 +103,14 @@ class Scrape(commands.Cog):
                 if not os.path.exists(chromedriver_path):
                     logging.error("Chromedriver not found at /usr/bin/chromedriver.")
                     return []
+                os.chmod(chromedriver_path, 0o755)
                 service = Service(chromedriver_path)
                 driver = webdriver.Chrome(service=service, options=chrome_options)
             elif system_os == "Linux" and arch == "x86_64":
+                driver_path = ChromeDriverManager().install()
+                os.chmod(driver_path, 0o755)
                 driver = webdriver.Chrome(
-                    service=Service(ChromeDriverManager().install()),
+                    service=Service(driver_path),
                     options=chrome_options,
                 )
             else:
