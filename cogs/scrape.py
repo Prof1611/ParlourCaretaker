@@ -83,29 +83,38 @@ class Scrape(commands.Cog):
         logging.info("Running scraper using Seated API...")
         new_entries = []
         try:
-            # Use the Seated API endpoint (replace with the correct endpoint as needed)
+            # API endpoint that returns event data (powered by Seated)
             url = "https://cdn.seated.com/api/tour/deb5e9f0-4af5-413c-a24b-1b22f11513b2?include=tour-events"
             response = requests.get(url)
             response.raise_for_status()  # Raise an exception for bad responses
             data = response.json()
             logging.info(f"Full API response: {data}")  # Debug: log the entire response
 
-            # Extract events from the "included" array where type is "tour-events"
+            # The API returns events in the "included" array
             included = data.get("included", [])
             events = [event for event in included if event.get("type") == "tour-events"]
             logging.info(f"Retrieved {len(events)} events from API.")
 
             for event in events:
                 attributes = event.get("attributes", {})
+                # Retrieve dates from the API; these are in ISO format (YYYY-MM-DD)
                 start_date = attributes.get("starts-at-date-local", "")
                 end_date = attributes.get("ends-at-date-local", "")
-                if end_date and end_date.lower() != "none":
-                    formatted_date = f"{start_date} - {end_date}"
+                # Convert ISO dates to the desired "DD Month YYYY" format using our helper
+                if start_date:
+                    formatted_start = self.format_api_date(start_date)
                 else:
-                    formatted_date = start_date
+                    formatted_start = ""
+                # Only include an end date if it exists and is different from the start date
+                if end_date and end_date.lower() != "none" and end_date != start_date:
+                    formatted_end = self.format_api_date(end_date)
+                    formatted_date = f"{formatted_start} - {formatted_end}"
+                else:
+                    formatted_date = formatted_start
 
                 venue = attributes.get("venue-name", "")
                 location = attributes.get("formatted-address", "")
+                # Use the same tuple format as before
                 entry = (formatted_date.lower(), venue.lower(), location.lower())
                 new_entries.append((formatted_date, venue, location))
                 logging.info(f"New entry found: {entry}")
@@ -113,7 +122,20 @@ class Scrape(commands.Cog):
             logging.error(f"An error occurred during API scraping: {e}")
         return new_entries
 
+    def format_api_date(self, iso_date_str):
+        """
+        Convert an ISO date string (YYYY-MM-DD) into the format "DD Month YYYY".
+        For example, "2025-04-15" becomes "15 April 2025".
+        """
+        try:
+            dt = datetime.strptime(iso_date_str, "%Y-%m-%d")
+            return dt.strftime("%d %B %Y")
+        except Exception as e:
+            logging.error(f"Error formatting API date '{iso_date_str}': {e}")
+            return iso_date_str
+
     def format_date(self, date_str):
+        # Original method remains unchanged.
         if "-" in date_str:
             start_date_str, end_date_str = map(str.strip, date_str.split("-"))
             start_date = datetime.strptime(start_date_str, "%b %d, %Y").strftime(
@@ -174,10 +196,7 @@ class Scrape(commands.Cog):
         new_threads_created = 0
 
         for entry in new_entries:
-            event_date = entry[0]
-            venue = entry[1]
-            location = entry[2]
-            # The thread title is just the date.
+            event_date, venue, location = entry
             thread_title = event_date.title()
             # Check if a thread exists with the matching title and that its starter message contains the location.
             exists = await self.thread_exists(gigchats_channel, thread_title, location)
@@ -259,9 +278,7 @@ class Scrape(commands.Cog):
         scheduled_events = await guild.fetch_scheduled_events()
 
         for entry in new_entries:
-            event_date = entry[0]
-            venue = entry[1]
-            location = entry[2]
+            event_date, venue, location = entry
             event_name = f"{event_date.title()} - {venue.title()}"
             exists = any(e.name.lower() == event_name.lower() for e in scheduled_events)
             logging.info(
