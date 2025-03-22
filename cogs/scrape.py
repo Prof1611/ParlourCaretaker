@@ -96,14 +96,33 @@ class Scrape(commands.Cog):
 
         try:
             if system_os == "Linux":
-                # Check for common Chrome binary locations.
-                if os.path.exists("/usr/bin/google-chrome"):
-                    chrome_options.binary_location = "/usr/bin/google-chrome"
-                elif os.path.exists("/usr/bin/chromium-browser"):
-                    chrome_options.binary_location = "/usr/bin/chromium-browser"
+                binary_path = None
+                # Allow specifying a custom binary location via config
+                if "chrome_binary" in self.config and os.path.exists(
+                    self.config["chrome_binary"]
+                ):
+                    binary_path = self.config["chrome_binary"]
                 else:
-                    logging.error("No Chrome binary found on Linux.")
+                    # Check several common paths for Chrome/Chromium
+                    for path in [
+                        "/usr/bin/google-chrome",
+                        "/usr/bin/chromium-browser",
+                        "/usr/bin/chromium",
+                        "/snap/bin/chromium",
+                    ]:
+                        if os.path.exists(path):
+                            binary_path = path
+                            break
+
+                if binary_path:
+                    chrome_options.binary_location = binary_path
+                    logging.info(f"Using Chrome binary: {binary_path}")
+                else:
+                    logging.error(
+                        "No Chrome binary found on Linux. Please install Chrome/Chromium or specify the binary location in config.yaml."
+                    )
                     return []
+
             # Initialise undetected‑chromedriver.
             driver = uc.Chrome(options=chrome_options)
 
