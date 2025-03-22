@@ -97,6 +97,7 @@ class Scrape(commands.Cog):
         arch = platform.machine()
         logging.info(f"Detected OS: {system_os}, Architecture: {arch}")
 
+        driver = None
         try:
             if system_os == "Windows":
                 driver = webdriver.Chrome(
