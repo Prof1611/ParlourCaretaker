@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import datetime
 import subprocess
 import sys
+import shutil
 
 # Load environment variables from .env file
 load_dotenv()
@@ -161,19 +162,20 @@ install_playwright_browsers()
 
 def install_playwright_deps():
     try:
-        # Check if we're running as root (on Unix systems)
+        # If running as root, no sudo is needed.
         if hasattr(os, "geteuid") and os.geteuid() == 0:
-            # Running as root, no sudo needed.
             cmd = [sys.executable, "-m", "playwright", "install-deps"]
         else:
-            # Not running as root; try to use sudo.
-            cmd = ["sudo", sys.executable, "-m", "playwright", "install-deps"]
-
+            sudo_path = shutil.which("sudo")
+            if sudo_path:
+                cmd = [sudo_path, sys.executable, "-m", "playwright", "install-deps"]
+            else:
+                # If sudo is not available, try without it.
+                cmd = [sys.executable, "-m", "playwright", "install-deps"]
         subprocess.run(cmd, check=True)
         print("Playwright dependencies installed successfully.")
     except subprocess.CalledProcessError as e:
         print("Error installing Playwright dependencies:", e)
-
 
 install_playwright_deps()
 
