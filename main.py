@@ -155,7 +155,25 @@ def install_playwright_browsers():
     except subprocess.CalledProcessError as e:
         print("Error installing Playwright browsers:", e)
 
+
 install_playwright_browsers()
+
+
+def install_playwright_deps():
+    try:
+        # If you're running as root, you might not need 'sudo'
+        # If you require sudo and it's allowed, include it.
+        cmd = ["playwright", "install-deps"]
+        # Uncomment the following line if sudo is required and available.
+        # cmd = ["sudo"] + cmd
+        subprocess.run(cmd, check=True)
+        print("Playwright dependencies installed successfully.")
+    except subprocess.CalledProcessError as e:
+        print("Error installing Playwright dependencies:", e)
+
+
+install_playwright_deps()
+
 
 async def main():
     async with bot:
