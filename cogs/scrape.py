@@ -78,6 +78,7 @@ class Scrape(commands.Cog):
     def run_scraper(self):
         logging.info("Running scraper...")
         new_entries = []
+        driver = None
 
         # Initialise undetected‑chromedriver options.
         chrome_options = uc.ChromeOptions()
@@ -94,11 +95,16 @@ class Scrape(commands.Cog):
         logging.info(f"Detected OS: {system_os}, Architecture: {arch}")
 
         try:
-            # For Linux on arm64/aarch64, specify the Chromium binary location if needed.
-            if system_os == "Linux" and arch in ["arm64", "aarch64"]:
-                chrome_options.binary_location = "/usr/bin/chromium-browser"
-
-            # Initialise the undetected‑chromedriver.
+            if system_os == "Linux":
+                # Check for common Chrome binary locations.
+                if os.path.exists("/usr/bin/google-chrome"):
+                    chrome_options.binary_location = "/usr/bin/google-chrome"
+                elif os.path.exists("/usr/bin/chromium-browser"):
+                    chrome_options.binary_location = "/usr/bin/chromium-browser"
+                else:
+                    logging.error("No Chrome binary found on Linux.")
+                    return []
+            # Initialise undetected‑chromedriver.
             driver = uc.Chrome(options=chrome_options)
 
             driver.get("https://www.thelastdinnerparty.co.uk/#live")
@@ -127,7 +133,11 @@ class Scrape(commands.Cog):
         except Exception as e:
             logging.error(f"An error occurred during scraping: {e}")
         finally:
-            driver.quit()
+            if driver is not None:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
 
         return new_entries
 
