@@ -3,17 +3,11 @@ import logging
 import yaml
 from discord import app_commands
 from discord.ext import commands
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
-from webdriver_manager.chrome import ChromeDriverManager
-import os
 import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import platform
-import subprocess
 
 
 def audit_log(message: str):
@@ -75,57 +69,14 @@ class Scrape(commands.Cog):
         logging.info("Running scraper...")
         new_entries = []
 
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--window-position=-2400,-2400")
-        chrome_options.add_argument("--log-level=3")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--remote-debugging-port=9222")
+        options = uc.ChromeOptions()
+        options.add_argument("--headless")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
 
-        os.environ["WDM_LOG_LEVEL"] = "3"
-
-        system_os = platform.system()
-        arch = platform.machine()
-        logging.info(f"Detected OS: {system_os}, Architecture: {arch}")
-
-        driver = None
         try:
-            if system_os == "Windows":
-                driver_path = ChromeDriverManager().install()
-                try:
-                    result = subprocess.run([driver_path], capture_output=True, text=True)
-                    logging.info(f"Manual driver test stdout: {result.stdout}")
-                    logging.info(f"Manual driver test stderr: {result.stderr}")
-                    logging.info(f"Manual driver test return code: {result.returncode}")
-                except Exception as e:
-                    logging.error(f"Manual driver test failed: {e}")
-                os.chmod(driver_path, 0o755)
-                driver = webdriver.Chrome(
-                    service=Service(driver_path),
-                    options=chrome_options,
-                )
-            elif system_os == "Linux" and arch in ["arm64", "aarch64"]:
-                chrome_options.binary_location = "/usr/bin/chromium-browser"
-                chromedriver_path = "/usr/bin/chromedriver"
-                if not os.path.exists(chromedriver_path):
-                    logging.error("Chromedriver not found at /usr/bin/chromedriver.")
-                    return []
-                os.chmod(chromedriver_path, 0o755)
-                service = Service(chromedriver_path)
-                driver = webdriver.Chrome(service=service, options=chrome_options)
-            elif system_os == "Linux" and arch == "x86_64":
-                driver_path = ChromeDriverManager().install()
-                os.chmod(driver_path, 0o755)
-                driver = webdriver.Chrome(
-                    service=Service(driver_path),
-                    options=chrome_options,
-                )
-            else:
-                logging.error("Unsupported OS for this scraper.")
-                return []
-
+            driver = uc.Chrome(options=options)
             driver.get("https://www.thelastdinnerparty.co.uk/#live")
             driver.implicitly_wait(10)
 
@@ -152,8 +103,10 @@ class Scrape(commands.Cog):
         except Exception as e:
             logging.error(f"An error occurred during scraping: {e}")
         finally:
-            if driver:
+            try:
                 driver.quit()
+            except:
+                pass
 
         return new_entries
 
@@ -203,65 +156,27 @@ class Scrape(commands.Cog):
                 color=discord.Color.red(),
             )
             await interaction.followup.send(embed=error_embed)
-            audit_log(
-                f"{interaction.user.name} (ID: {interaction.user.id}): Failed to update threads because channel with ID {gigchats_id} was not found in guild '{guild.name}' (ID: {guild.id})."
-            )
             return 0
 
         new_threads_created = 0
-
         for entry in new_entries:
-            event_date = entry[0]
-            venue = entry[1]
-            location = entry[2]
+            event_date, venue, location = entry
             thread_title = event_date.title()
             exists = await self.thread_exists(gigchats_channel, thread_title, location)
-            logging.info(
-                f"Does thread '{thread_title}' with location '{location.title()}' exist in channel '{gigchats_channel.name}'? {exists}"
-            )
-
             if not exists:
                 try:
                     content = (
                         f"The Last Dinner Party at {venue.title()}, {location.title()}"
                     )
-                    logging.info(f"Creating thread for: {thread_title}")
                     await gigchats_channel.create_thread(
                         name=thread_title,
                         content=content,
                         auto_archive_duration=60,
                     )
                     new_threads_created += 1
-                    logging.info(f"Successfully created thread: {thread_title}")
-                    audit_log(
-                        f"{interaction.user.name} (ID: {interaction.user.id}) created thread '{thread_title}' in channel #{gigchats_channel.name} (ID: {gigchats_channel.id}) in guild '{guild.name}' (ID: {guild.id})."
-                    )
                     await asyncio.sleep(5)
-                except discord.Forbidden:
-                    logging.error(
-                        f"Permission denied when trying to create thread '{thread_title}'"
-                    )
-                    error_embed = discord.Embed(
-                        title="Error",
-                        description=f"Permission denied when trying to create thread '{thread_title}'.",
-                        color=discord.Color.red(),
-                    )
-                    await interaction.followup.send(embed=error_embed)
-                    audit_log(
-                        f"{interaction.user.name} (ID: {interaction.user.id}) encountered permission error creating thread '{thread_title}' in channel #{gigchats_channel.name} (ID: {gigchats_channel.id})."
-                    )
-                except discord.HTTPException as e:
+                except Exception as e:
                     logging.error(f"Failed to create thread '{thread_title}': {e}")
-                    error_embed = discord.Embed(
-                        title="Error",
-                        description=f"Failed to create thread '{thread_title}': `{e}`",
-                        color=discord.Color.red(),
-                    )
-                    await interaction.followup.send(embed=error_embed)
-                    audit_log(
-                        f"{interaction.user.name} (ID: {interaction.user.id}) failed to create thread '{thread_title}' in channel #{gigchats_channel.name} (ID: {gigchats_channel.id}) due to HTTP error: {e}"
-                    )
-
         return new_threads_created
 
     async def thread_exists(self, channel, thread_title, location):
@@ -271,10 +186,10 @@ class Scrape(commands.Cog):
             if thread.name.strip().lower() == normalized_title:
                 try:
                     starter_message = await thread.fetch_message(thread.id)
+                    if normalized_location in starter_message.content.lower():
+                        return True
                 except Exception:
                     continue
-                if normalized_location in starter_message.content.lower():
-                    return True
         return False
 
     async def check_server_events(self, guild, interaction, new_entries):
@@ -282,8 +197,7 @@ class Scrape(commands.Cog):
         try:
             with open("event-image.jpg", "rb") as img_file:
                 event_image = img_file.read()
-        except Exception as e:
-            logging.error(f"Failed to load event image: {e}")
+        except Exception:
             event_image = None
 
         scheduled_events = await guild.fetch_scheduled_events()
@@ -291,11 +205,7 @@ class Scrape(commands.Cog):
         for entry in new_entries:
             event_date, venue, location = entry
             event_name = f"{event_date.title()} - {venue.title()}"
-            exists = any(e.name.lower() == event_name.lower() for e in scheduled_events)
-            logging.info(
-                f"Does scheduled event '{event_name}' exist in guild '{guild.name}'? {exists}"
-            )
-            if not exists:
+            if not any(e.name.lower() == event_name.lower() for e in scheduled_events):
                 start_time, end_time = self.parse_event_dates(event_date)
                 try:
                     await guild.create_scheduled_event(
@@ -309,32 +219,11 @@ class Scrape(commands.Cog):
                         privacy_level=discord.PrivacyLevel.guild_only,
                     )
                     new_events_created += 1
-                    logging.info(f"Successfully created scheduled event: {event_name}")
-                    audit_log(
-                        f"{interaction.user.name} (ID: {interaction.user.id}) created scheduled event '{event_name}' in guild '{guild.name}' (ID: {guild.id})."
-                    )
                     await asyncio.sleep(5)
-                except discord.Forbidden:
-                    logging.error(
-                        f"Permission denied when trying to create scheduled event '{event_name}'"
-                    )
-                    error_embed = discord.Embed(
-                        title="Error",
-                        description=f"Permission denied when trying to create scheduled event '{event_name}'.",
-                        color=discord.Color.red(),
-                    )
-                    await interaction.followup.send(embed=error_embed)
-                except discord.HTTPException as e:
+                except Exception as e:
                     logging.error(
                         f"Failed to create scheduled event '{event_name}': {e}"
                     )
-                    error_embed = discord.Embed(
-                        title="Error",
-                        description=f"Failed to create scheduled event '{event_name}': `{e}`",
-                        color=discord.Color.red(),
-                    )
-                    await interaction.followup.send(embed=error_embed)
-
         return new_events_created
 
     async def send_combined_summary(self, interaction, threads_created, events_created):
@@ -352,11 +241,6 @@ class Scrape(commands.Cog):
             ),
         )
         await interaction.followup.send(embed=embed)
-
-    async def setup_audit(self, interaction):
-        audit_log(
-            f"{interaction.user.name} (ID: {interaction.user.id}) initiated a scrape command in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
-        )
 
 
 async def setup(bot):
