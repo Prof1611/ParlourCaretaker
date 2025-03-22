@@ -161,13 +161,18 @@ install_playwright_browsers()
 
 def install_playwright_deps():
     try:
-        # Use sys.executable to run the module command, which is more reliable in containers
-        cmd = [sys.executable, "-m", "playwright", "install-deps"]
+        # Check if we're running as root (on Unix systems)
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            # Running as root, no sudo needed.
+            cmd = [sys.executable, "-m", "playwright", "install-deps"]
+        else:
+            # Not running as root; try to use sudo.
+            cmd = ["sudo", sys.executable, "-m", "playwright", "install-deps"]
+
         subprocess.run(cmd, check=True)
         print("Playwright dependencies installed successfully.")
     except subprocess.CalledProcessError as e:
         print("Error installing Playwright dependencies:", e)
-
 
 
 install_playwright_deps()
