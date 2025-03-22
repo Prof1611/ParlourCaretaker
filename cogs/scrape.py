@@ -3,14 +3,12 @@ import logging
 import yaml
 from discord import app_commands
 from discord.ext import commands
-from selenium.webdriver.common.by import By
-import undetected_chromedriver as uc  # Use undetected‑chromedriver
-import os
 import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import re
-import platform
+
+# Import Playwright's synchronous API.
+from playwright.sync_api import sync_playwright
 
 
 def audit_log(message: str):
@@ -23,7 +21,7 @@ def audit_log(message: str):
 class Scrape(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Load the config file with UTF-8 encoding to handle special characters like emoji.
+        # Load the config file with UTF-8 encoding to handle special characters.
         with open("config.yaml", "r", encoding="utf-8") as config_file:
             self.config = yaml.safe_load(config_file)
 
@@ -38,7 +36,6 @@ class Scrape(commands.Cog):
     )
     async def scrape(self, interaction: discord.Interaction):
         await interaction.response.defer()
-        # Log the invocation of the scrape command.
         audit_log(
             f"{interaction.user.name} (ID: {interaction.user.id}) invoked /scrape command in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
         )
@@ -48,15 +45,12 @@ class Scrape(commands.Cog):
             audit_log(
                 f"{interaction.user.name} (ID: {interaction.user.id}) retrieved {len(new_entries)} new entries from the website."
             )
-            # Create forum threads and get count.
             threads_created = await self.check_forum_threads(
                 interaction.guild, interaction, new_entries
             )
-            # Create scheduled events and get count.
             events_created = await self.check_server_events(
                 interaction.guild, interaction, new_entries
             )
-            # Send a combined summary.
             await self.send_combined_summary(
                 interaction, threads_created, events_created
             )
@@ -76,88 +70,35 @@ class Scrape(commands.Cog):
             await interaction.followup.send(embed=error_embed)
 
     def run_scraper(self):
-        logging.info("Running scraper...")
+        logging.info("Running scraper with Playwright...")
         new_entries = []
-        driver = None
-
-        # Initialise undetected‑chromedriver options.
-        chrome_options = uc.ChromeOptions()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--window-position=-2400,-2400")
-        chrome_options.add_argument("--log-level=3")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--remote-debugging-port=9222")
-
-        # Detect the operating system.
-        system_os = platform.system()
-        arch = platform.machine()
-        logging.info(f"Detected OS: {system_os}, Architecture: {arch}")
-
         try:
-            if system_os == "Linux":
-                binary_path = None
-                # Allow specifying a custom binary location via config
-                if "chrome_binary" in self.config and os.path.exists(
-                    self.config["chrome_binary"]
-                ):
-                    binary_path = self.config["chrome_binary"]
-                else:
-                    # Check several common paths for Chrome/Chromium
-                    for path in [
-                        "/usr/bin/google-chrome",
-                        "/usr/bin/chromium-browser",
-                        "/usr/bin/chromium",
-                        "/snap/bin/chromium",
-                    ]:
-                        if os.path.exists(path):
-                            binary_path = path
-                            break
-
-                if binary_path:
-                    chrome_options.binary_location = binary_path
-                    logging.info(f"Using Chrome binary: {binary_path}")
-                else:
-                    logging.error(
-                        "No Chrome binary found on Linux. Please install Chrome/Chromium or specify the binary location in config.yaml."
-                    )
-                    return []
-
-            # Initialise undetected‑chromedriver.
-            driver = uc.Chrome(options=chrome_options)
-
-            driver.get("https://www.thelastdinnerparty.co.uk/#live")
-            driver.implicitly_wait(10)
-
-            event_rows = driver.find_elements(By.CLASS_NAME, "seated-event-row")
-            logging.info(
-                f"Successfully retrieved {len(event_rows)} event rows from website"
-            )
-
-            for row in event_rows:
-                date_str = row.find_element(
-                    By.CLASS_NAME, "seated-event-date-cell"
-                ).text.strip()
-                venue = row.find_element(
-                    By.CLASS_NAME, "seated-event-venue-name"
-                ).text.strip()
-                location = row.find_element(
-                    By.CLASS_NAME, "seated-event-venue-location"
-                ).text.strip()
-
-                date = self.format_date(date_str)
-                entry = (date.lower(), venue.lower(), location.lower())
-                new_entries.append((date, venue, location))
-                logging.info(f"New entry found: {entry}")
+            with sync_playwright() as p:
+                # Launch a headless Chromium browser.
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                page.goto("https://www.thelastdinnerparty.co.uk/#live")
+                # Wait for content to load; adjust timeout as needed.
+                page.wait_for_timeout(10000)
+                event_rows = page.query_selector_all(".seated-event-row")
+                logging.info(
+                    f"Successfully retrieved {len(event_rows)} event rows from website"
+                )
+                for row in event_rows:
+                    date_elem = row.query_selector(".seated-event-date-cell")
+                    venue_elem = row.query_selector(".seated-event-venue-name")
+                    location_elem = row.query_selector(".seated-event-venue-location")
+                    if date_elem and venue_elem and location_elem:
+                        date_str = date_elem.inner_text().strip()
+                        venue = venue_elem.inner_text().strip()
+                        location = location_elem.inner_text().strip()
+                        date = self.format_date(date_str)
+                        entry = (date.lower(), venue.lower(), location.lower())
+                        new_entries.append((date, venue, location))
+                        logging.info(f"New entry found: {entry}")
+                browser.close()
         except Exception as e:
-            logging.error(f"An error occurred during scraping: {e}")
-        finally:
-            if driver is not None:
-                try:
-                    driver.quit()
-                except Exception:
-                    pass
-
+            logging.error(f"An error occurred during scraping with Playwright: {e}")
         return new_entries
 
     def format_date(self, date_str):
@@ -172,13 +113,6 @@ class Scrape(commands.Cog):
             return datetime.strptime(date_str, "%b %d, %Y").strftime("%d %B %Y")
 
     def parse_event_dates(self, formatted_date: str):
-        """
-        Parse the formatted date string (e.g. "01 January 2025" or "01 January 2025 - 02 January 2025")
-        into start and end timezone-aware datetime objects.
-
-        - If it's a single date, set the event from 7:00 PM to 11:00 PM.
-        - If it's a range, set the start time to 8:00 AM on the first day and the end time to 11:00 PM on the last day.
-        """
         try:
             tz = ZoneInfo("Europe/London")
             if "-" in formatted_date:
@@ -204,7 +138,6 @@ class Scrape(commands.Cog):
     async def check_forum_threads(self, guild, interaction, new_entries):
         gigchats_id = self.config["gigchats_id"]
         gigchats_channel = guild.get_channel(gigchats_id)
-
         if gigchats_channel is None:
             logging.error(f"Channel with ID {gigchats_id} not found.")
             error_embed = discord.Embed(
@@ -219,19 +152,13 @@ class Scrape(commands.Cog):
             return 0
 
         new_threads_created = 0
-
         for entry in new_entries:
-            event_date = entry[0]
-            venue = entry[1]
-            location = entry[2]
-            # The thread title is just the date.
+            event_date, venue, location = entry
             thread_title = event_date.title()
-            # Check if a thread exists with the matching title and that its starter message contains the location.
             exists = await self.thread_exists(gigchats_channel, thread_title, location)
             logging.info(
                 f"Does thread '{thread_title}' with location '{location.title()}' exist in channel '{gigchats_channel.name}'? {exists}"
             )
-
             if not exists:
                 try:
                     content = (
@@ -273,19 +200,16 @@ class Scrape(commands.Cog):
                     audit_log(
                         f"{interaction.user.name} (ID: {interaction.user.id}) failed to create thread '{thread_title}' in channel #{gigchats_channel.name} (ID: {gigchats_channel.id}) due to HTTP error: {e}"
                     )
-
         return new_threads_created
 
     async def thread_exists(self, channel, thread_title, location):
-        """Check if a thread exists with the given title and if its starter message contains the location."""
         normalized_title = thread_title.strip().lower()
         normalized_location = location.strip().lower()
         for thread in channel.threads:
             if thread.name.strip().lower() == normalized_title:
                 try:
-                    # Fetch the starter message of the thread.
                     starter_message = await thread.fetch_message(thread.id)
-                except Exception as e:
+                except Exception:
                     continue
                 if normalized_location in starter_message.content.lower():
                     return True
@@ -293,24 +217,16 @@ class Scrape(commands.Cog):
 
     async def check_server_events(self, guild, interaction, new_entries):
         new_events_created = 0
-
-        # Load the event image from the root folder.
         try:
             with open("event-image.jpg", "rb") as img_file:
                 event_image = img_file.read()
         except Exception as e:
             logging.error(f"Failed to load event image: {e}")
             event_image = None
-
-        # Refresh the scheduled events list.
         scheduled_events = await guild.fetch_scheduled_events()
-
         for entry in new_entries:
-            event_date = entry[0]
-            venue = entry[1]
-            location = entry[2]
+            event_date, venue, location = entry
             event_name = f"{event_date.title()} - {venue.title()}"
-
             exists = any(e.name.lower() == event_name.lower() for e in scheduled_events)
             logging.info(
                 f"Does scheduled event '{event_name}' exist in guild '{guild.name}'? {exists}"
@@ -360,7 +276,6 @@ class Scrape(commands.Cog):
                     audit_log(
                         f"{interaction.user.name} (ID: {interaction.user.id}) failed to create scheduled event '{event_name}' in guild '{guild.name}' (ID: {guild.id}) due to HTTP error: {e}"
                     )
-
         return new_events_created
 
     async def send_combined_summary(
