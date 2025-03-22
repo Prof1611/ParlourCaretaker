@@ -12,7 +12,6 @@ import os
 import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import re
 import platform
 
 
@@ -144,7 +143,8 @@ class Scrape(commands.Cog):
         except Exception as e:
             logging.error(f"An error occurred during scraping: {e}")
         finally:
-            driver.quit()
+            if driver:
+                driver.quit()
 
         return new_entries
 
@@ -160,13 +160,6 @@ class Scrape(commands.Cog):
             return datetime.strptime(date_str, "%b %d, %Y").strftime("%d %B %Y")
 
     def parse_event_dates(self, formatted_date: str):
-        """
-        Parse the formatted date string (e.g. "01 January 2025" or "01 January 2025 - 02 January 2025")
-        into start and end timezone-aware datetime objects.
-
-        - If it's a single date, set the event from 7:00 PM to 11:00 PM.
-        - If it's a range, set the start time to 8:00 AM on the first day and the end time to 11:00 PM on the last day.
-        """
         try:
             tz = ZoneInfo("Europe/London")
             if "-" in formatted_date:
