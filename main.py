@@ -162,16 +162,9 @@ install_playwright_browsers()
 
 def install_playwright_deps():
     try:
-        # If running as root, no sudo is needed.
-        if hasattr(os, "geteuid") and os.geteuid() == 0:
-            cmd = [sys.executable, "-m", "playwright", "install-deps"]
-        else:
-            sudo_path = shutil.which("sudo")
-            if sudo_path:
-                cmd = [sudo_path, sys.executable, "-m", "playwright", "install-deps"]
-            else:
-                # If sudo is not available, try without it.
-                cmd = [sys.executable, "-m", "playwright", "install-deps"]
+        # We always run without sudo, regardless of the current user.
+        # This may fail if permissions are insufficient, but in many containers you're already root.
+        cmd = [sys.executable, "-m", "playwright", "install-deps"]
         subprocess.run(cmd, check=True)
         print("Playwright dependencies installed successfully.")
     except subprocess.CalledProcessError as e:
