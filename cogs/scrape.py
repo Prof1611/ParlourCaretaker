@@ -3,12 +3,18 @@ import logging
 import yaml
 from discord import app_commands
 from discord.ext import commands
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
 import os
 import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import re
-import requests  # For API requests
+import platform
+import requests  # New import for API requests
 
 
 def audit_log(message: str):
@@ -36,6 +42,7 @@ class Scrape(commands.Cog):
     )
     async def scrape(self, interaction: discord.Interaction):
         await interaction.response.defer()
+        # Log the invocation of the scrape command.
         audit_log(
             f"{interaction.user.name} (ID: {interaction.user.id}) invoked /scrape command in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
         )
@@ -43,7 +50,7 @@ class Scrape(commands.Cog):
             # Run the scraper asynchronously in a separate thread.
             new_entries = await asyncio.to_thread(self.run_scraper)
             audit_log(
-                f"{interaction.user.name} (ID: {interaction.user.id}) retrieved {len(new_entries)} new entries from the API."
+                f"{interaction.user.name} (ID: {interaction.user.id}) retrieved {len(new_entries)} new entries from the website."
             )
             # Create forum threads and get count.
             threads_created = await self.check_forum_threads(
@@ -76,7 +83,7 @@ class Scrape(commands.Cog):
         logging.info("Running scraper using Seated API...")
         new_entries = []
         try:
-            # API endpoint that returns event data (powered by Seated)
+            # Use the Seated API endpoint (replace with the correct endpoint as needed)
             url = "https://cdn.seated.com/api/tour/deb5e9f0-4af5-413c-a24b-1b22f11513b2?include=tour-events"
             response = requests.get(url)
             response.raise_for_status()  # Raise an exception for bad responses
@@ -90,16 +97,14 @@ class Scrape(commands.Cog):
 
             for event in events:
                 attributes = event.get("attributes", {})
-                # Use ISO date format from the API; adjust if needed.
                 start_date = attributes.get("starts-at-date-local", "")
                 end_date = attributes.get("ends-at-date-local", "")
-                if end_date and end_date != "None":
+                if end_date and end_date.lower() != "none":
                     formatted_date = f"{start_date} - {end_date}"
                 else:
                     formatted_date = start_date
 
                 venue = attributes.get("venue-name", "")
-                # For location, we can use the formatted address
                 location = attributes.get("formatted-address", "")
                 entry = (formatted_date.lower(), venue.lower(), location.lower())
                 new_entries.append((formatted_date, venue, location))
@@ -108,9 +113,20 @@ class Scrape(commands.Cog):
             logging.error(f"An error occurred during API scraping: {e}")
         return new_entries
 
+    def format_date(self, date_str):
+        if "-" in date_str:
+            start_date_str, end_date_str = map(str.strip, date_str.split("-"))
+            start_date = datetime.strptime(start_date_str, "%b %d, %Y").strftime(
+                "%d %B %Y"
+            )
+            end_date = datetime.strptime(end_date_str, "%b %d, %Y").strftime("%d %B %Y")
+            return f"{start_date} - {end_date}"
+        else:
+            return datetime.strptime(date_str, "%b %d, %Y").strftime("%d %B %Y")
+
     def parse_event_dates(self, formatted_date: str):
         """
-        Parse the formatted date string (e.g. "2025-04-15" or "2025-04-15 - 2025-04-18")
+        Parse the formatted date string (e.g. "01 January 2025" or "01 January 2025 - 02 January 2025")
         into start and end timezone-aware datetime objects.
 
         - If it's a single date, set the event from 7:00 PM to 11:00 PM.
@@ -120,8 +136,8 @@ class Scrape(commands.Cog):
             tz = ZoneInfo("Europe/London")
             if "-" in formatted_date:
                 start_date_str, end_date_str = map(str.strip, formatted_date.split("-"))
-                dt_start = datetime.strptime(start_date_str, "%Y-%m-%d")
-                dt_end = datetime.strptime(end_date_str, "%Y-%m-%d")
+                dt_start = datetime.strptime(start_date_str, "%d %B %Y")
+                dt_end = datetime.strptime(end_date_str, "%d %B %Y")
                 start_dt = datetime(
                     dt_start.year, dt_start.month, dt_start.day, 8, 0, 0, tzinfo=tz
                 )
@@ -129,7 +145,7 @@ class Scrape(commands.Cog):
                     dt_end.year, dt_end.month, dt_end.day, 23, 0, 0, tzinfo=tz
                 )
             else:
-                dt = datetime.strptime(formatted_date, "%Y-%m-%d")
+                dt = datetime.strptime(formatted_date, "%d %B %Y")
                 start_dt = datetime(dt.year, dt.month, dt.day, 19, 0, 0, tzinfo=tz)
                 end_dt = datetime(dt.year, dt.month, dt.day, 23, 0, 0, tzinfo=tz)
             return start_dt, end_dt
@@ -158,16 +174,22 @@ class Scrape(commands.Cog):
         new_threads_created = 0
 
         for entry in new_entries:
-            event_date, venue, location = entry
+            event_date = entry[0]
+            venue = entry[1]
+            location = entry[2]
+            # The thread title is just the date.
             thread_title = event_date.title()
+            # Check if a thread exists with the matching title and that its starter message contains the location.
             exists = await self.thread_exists(gigchats_channel, thread_title, location)
             logging.info(
-                f"Does thread '{thread_title}' with location '{location.title() if location else ''}' exist in channel '{gigchats_channel.name}'? {exists}"
+                f"Does thread '{thread_title}' with location '{location.title()}' exist in channel '{gigchats_channel.name}'? {exists}"
             )
 
             if not exists:
                 try:
-                    content = f"The Last Dinner Party at {venue.title() if venue else ''}, {location.title() if location else ''}"
+                    content = (
+                        f"The Last Dinner Party at {venue.title()}, {location.title()}"
+                    )
                     logging.info(f"Creating thread for: {thread_title}")
                     await gigchats_channel.create_thread(
                         name=thread_title,
@@ -210,17 +232,15 @@ class Scrape(commands.Cog):
     async def thread_exists(self, channel, thread_title, location):
         """Check if a thread exists with the given title and if its starter message contains the location."""
         normalized_title = thread_title.strip().lower()
-        normalized_location = location.strip().lower() if location else ""
+        normalized_location = location.strip().lower()
         for thread in channel.threads:
             if thread.name.strip().lower() == normalized_title:
                 try:
+                    # Fetch the starter message of the thread.
                     starter_message = await thread.fetch_message(thread.id)
-                except Exception:
+                except Exception as e:
                     continue
-                if (
-                    normalized_location
-                    and normalized_location in starter_message.content.lower()
-                ):
+                if normalized_location in starter_message.content.lower():
                     return True
         return False
 
@@ -239,8 +259,10 @@ class Scrape(commands.Cog):
         scheduled_events = await guild.fetch_scheduled_events()
 
         for entry in new_entries:
-            event_date, venue, location = entry
-            event_name = f"{event_date.title()} - {venue.title() if venue else ''}"
+            event_date = entry[0]
+            venue = entry[1]
+            location = entry[2]
+            event_name = f"{event_date.title()} - {venue.title()}"
             exists = any(e.name.lower() == event_name.lower() for e in scheduled_events)
             logging.info(
                 f"Does scheduled event '{event_name}' exist in guild '{guild.name}'? {exists}"
@@ -250,10 +272,10 @@ class Scrape(commands.Cog):
                 try:
                     await guild.create_scheduled_event(
                         name=event_name,
-                        description=f"The Last Dinner Party at {venue.title() if venue else ''}, {location.title() if location else ''}",
+                        description=f"The Last Dinner Party at {venue.title()}, {location.title()}",
                         start_time=start_time,
                         end_time=end_time,
-                        location=f"{venue.title() if venue else ''}, {location.title() if location else ''}",
+                        location=f"{venue.title()}, {location.title()}",
                         entity_type=discord.EntityType.external,
                         image=event_image,
                         privacy_level=discord.PrivacyLevel.guild_only,
