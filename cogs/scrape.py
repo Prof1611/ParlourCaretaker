@@ -3,12 +3,12 @@ import logging
 import yaml
 from discord import app_commands
 from discord.ext import commands
+import os
 import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-
-# Import Playwright's synchronous API.
-from playwright.sync_api import sync_playwright
+import re
+import requests  # For API requests
 
 
 def audit_log(message: str):
@@ -21,7 +21,7 @@ def audit_log(message: str):
 class Scrape(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Load the config file with UTF-8 encoding to handle special characters.
+        # Load the config file with UTF-8 encoding to handle special characters like emoji.
         with open("config.yaml", "r", encoding="utf-8") as config_file:
             self.config = yaml.safe_load(config_file)
 
@@ -43,14 +43,17 @@ class Scrape(commands.Cog):
             # Run the scraper asynchronously in a separate thread.
             new_entries = await asyncio.to_thread(self.run_scraper)
             audit_log(
-                f"{interaction.user.name} (ID: {interaction.user.id}) retrieved {len(new_entries)} new entries from the website."
+                f"{interaction.user.name} (ID: {interaction.user.id}) retrieved {len(new_entries)} new entries from the API."
             )
+            # Create forum threads and get count.
             threads_created = await self.check_forum_threads(
                 interaction.guild, interaction, new_entries
             )
+            # Create scheduled events and get count.
             events_created = await self.check_server_events(
                 interaction.guild, interaction, new_entries
             )
+            # Send a combined summary.
             await self.send_combined_summary(
                 interaction, threads_created, events_created
             )
@@ -70,55 +73,48 @@ class Scrape(commands.Cog):
             await interaction.followup.send(embed=error_embed)
 
     def run_scraper(self):
-        logging.info("Running scraper with Playwright...")
+        logging.info("Running scraper using Seated API...")
         new_entries = []
         try:
-            with sync_playwright() as p:
-                # Launch a headless Chromium browser.
-                browser = p.chromium.launch(headless=True)
-                page = browser.new_page()
-                page.goto("https://www.thelastdinnerparty.co.uk/#live")
-                # Wait for content to load; adjust timeout as needed.
-                page.wait_for_timeout(10000)
-                event_rows = page.query_selector_all(".seated-event-row")
-                logging.info(
-                    f"Successfully retrieved {len(event_rows)} event rows from website"
-                )
-                for row in event_rows:
-                    date_elem = row.query_selector(".seated-event-date-cell")
-                    venue_elem = row.query_selector(".seated-event-venue-name")
-                    location_elem = row.query_selector(".seated-event-venue-location")
-                    if date_elem and venue_elem and location_elem:
-                        date_str = date_elem.inner_text().strip()
-                        venue = venue_elem.inner_text().strip()
-                        location = location_elem.inner_text().strip()
-                        date = self.format_date(date_str)
-                        entry = (date.lower(), venue.lower(), location.lower())
-                        new_entries.append((date, venue, location))
-                        logging.info(f"New entry found: {entry}")
-                browser.close()
+            # API endpoint that returns event data (powered by Seated)
+            url = "https://cdn.seated.com/api/tour/deb5e9f0-4af5-413c-a24b-1b22f11513b2?include=tour-events"
+            response = requests.get(url)
+            response.raise_for_status()  # Raise an exception for bad responses
+            data = response.json()
+            # Adjust this key based on the actual JSON structure returned by the API.
+            events = data.get("tour-events", [])
+            logging.info(f"Retrieved {len(events)} events from API.")
+            for event in events:
+                # Adjust these key names based on the actual API response.
+                start_date = event.get("startDate", "")
+                end_date = event.get("endDate", "")
+                if end_date:
+                    formatted_date = f"{start_date} - {end_date}"
+                else:
+                    formatted_date = start_date
+                venue = event.get("venue", "")
+                location = event.get("location", "")
+                entry = (formatted_date.lower(), venue.lower(), location.lower())
+                new_entries.append((formatted_date, venue, location))
+                logging.info(f"New entry found: {entry}")
         except Exception as e:
-            logging.error(f"An error occurred during scraping with Playwright: {e}")
+            logging.error(f"An error occurred during API scraping: {e}")
         return new_entries
 
-    def format_date(self, date_str):
-        if "-" in date_str:
-            start_date_str, end_date_str = map(str.strip, date_str.split("-"))
-            start_date = datetime.strptime(start_date_str, "%b %d, %Y").strftime(
-                "%d %B %Y"
-            )
-            end_date = datetime.strptime(end_date_str, "%b %d, %Y").strftime("%d %B %Y")
-            return f"{start_date} - {end_date}"
-        else:
-            return datetime.strptime(date_str, "%b %d, %Y").strftime("%d %B %Y")
-
     def parse_event_dates(self, formatted_date: str):
+        """
+        Parse the formatted date string (e.g. "2025-04-15" or "2025-04-15 - 2025-04-18")
+        into start and end timezone-aware datetime objects.
+
+        - If it's a single date, set the event from 7:00 PM to 11:00 PM.
+        - If it's a range, set the start time to 8:00 AM on the first day and the end time to 11:00 PM on the last day.
+        """
         try:
             tz = ZoneInfo("Europe/London")
             if "-" in formatted_date:
                 start_date_str, end_date_str = map(str.strip, formatted_date.split("-"))
-                dt_start = datetime.strptime(start_date_str, "%d %B %Y")
-                dt_end = datetime.strptime(end_date_str, "%d %B %Y")
+                dt_start = datetime.strptime(start_date_str, "%Y-%m-%d")
+                dt_end = datetime.strptime(end_date_str, "%Y-%m-%d")
                 start_dt = datetime(
                     dt_start.year, dt_start.month, dt_start.day, 8, 0, 0, tzinfo=tz
                 )
@@ -126,7 +122,7 @@ class Scrape(commands.Cog):
                     dt_end.year, dt_end.month, dt_end.day, 23, 0, 0, tzinfo=tz
                 )
             else:
-                dt = datetime.strptime(formatted_date, "%d %B %Y")
+                dt = datetime.strptime(formatted_date, "%Y-%m-%d")
                 start_dt = datetime(dt.year, dt.month, dt.day, 19, 0, 0, tzinfo=tz)
                 end_dt = datetime(dt.year, dt.month, dt.day, 23, 0, 0, tzinfo=tz)
             return start_dt, end_dt
@@ -157,13 +153,11 @@ class Scrape(commands.Cog):
             thread_title = event_date.title()
             exists = await self.thread_exists(gigchats_channel, thread_title, location)
             logging.info(
-                f"Does thread '{thread_title}' with location '{location.title()}' exist in channel '{gigchats_channel.name}'? {exists}"
+                f"Does thread '{thread_title}' with location '{location.title() if location else ''}' exist in channel '{gigchats_channel.name}'? {exists}"
             )
             if not exists:
                 try:
-                    content = (
-                        f"The Last Dinner Party at {venue.title()}, {location.title()}"
-                    )
+                    content = f"The Last Dinner Party at {venue.title() if venue else ''}, {location.title() if location else ''}"
                     logging.info(f"Creating thread for: {thread_title}")
                     await gigchats_channel.create_thread(
                         name=thread_title,
@@ -203,15 +197,19 @@ class Scrape(commands.Cog):
         return new_threads_created
 
     async def thread_exists(self, channel, thread_title, location):
+        """Check if a thread exists with the given title and if its starter message contains the location."""
         normalized_title = thread_title.strip().lower()
-        normalized_location = location.strip().lower()
+        normalized_location = location.strip().lower() if location else ""
         for thread in channel.threads:
             if thread.name.strip().lower() == normalized_title:
                 try:
                     starter_message = await thread.fetch_message(thread.id)
                 except Exception:
                     continue
-                if normalized_location in starter_message.content.lower():
+                if (
+                    normalized_location
+                    and normalized_location in starter_message.content.lower()
+                ):
                     return True
         return False
 
@@ -223,10 +221,11 @@ class Scrape(commands.Cog):
         except Exception as e:
             logging.error(f"Failed to load event image: {e}")
             event_image = None
+
         scheduled_events = await guild.fetch_scheduled_events()
         for entry in new_entries:
             event_date, venue, location = entry
-            event_name = f"{event_date.title()} - {venue.title()}"
+            event_name = f"{event_date.title()} - {venue.title() if venue else ''}"
             exists = any(e.name.lower() == event_name.lower() for e in scheduled_events)
             logging.info(
                 f"Does scheduled event '{event_name}' exist in guild '{guild.name}'? {exists}"
@@ -236,10 +235,10 @@ class Scrape(commands.Cog):
                 try:
                     await guild.create_scheduled_event(
                         name=event_name,
-                        description=f"The Last Dinner Party at {venue.title()}, {location.title()}",
+                        description=f"The Last Dinner Party at {venue.title() if venue else ''}, {location.title() if location else ''}",
                         start_time=start_time,
                         end_time=end_time,
-                        location=f"{venue.title()}, {location.title()}",
+                        location=f"{venue.title() if venue else ''}, {location.title() if location else ''}",
                         entity_type=discord.EntityType.external,
                         image=event_image,
                         privacy_level=discord.PrivacyLevel.guild_only,

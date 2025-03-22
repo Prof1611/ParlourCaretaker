@@ -8,9 +8,6 @@ import asyncio
 import logging
 from dotenv import load_dotenv
 import datetime
-import subprocess
-import sys
-import shutil
 
 # Load environment variables from .env file
 load_dotenv()
@@ -146,31 +143,6 @@ async def load_cogs():
         if filename.endswith(".py"):
             await bot.load_extension(f"cogs.{filename[:-3]}")
             audit_log(f"Loaded cog: {filename[:-3]}")
-
-
-def install_playwright_browsers():
-    try:
-        # Attempt to install the browsers
-        subprocess.run([sys.executable, "-m", "playwright", "install"], check=True)
-        print("Playwright browsers installed successfully.")
-    except subprocess.CalledProcessError as e:
-        print("Error installing Playwright browsers:", e)
-
-
-install_playwright_browsers()
-
-
-def install_playwright_deps():
-    try:
-        # We always run without sudo, regardless of the current user.
-        # This may fail if permissions are insufficient, but in many containers you're already root.
-        cmd = [sys.executable, "-m", "playwright", "install-deps"]
-        subprocess.run(cmd, check=True)
-        print("Playwright dependencies installed successfully.")
-    except subprocess.CalledProcessError as e:
-        print("Error installing Playwright dependencies:", e)
-
-install_playwright_deps()
 
 
 async def main():
