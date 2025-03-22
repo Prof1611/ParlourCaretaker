@@ -81,7 +81,11 @@ class Scrape(commands.Cog):
             response = requests.get(url)
             response.raise_for_status()  # Raise an exception for bad responses
             data = response.json()
-            # Adjust this key based on the actual JSON structure returned by the API.
+            logging.info(
+                f"Full API response: {data}"
+            )  # Temporary debug: log entire response
+
+            # Adjust this key based on the JSON structure returned by the API.
             events = data.get("tour-events", [])
             logging.info(f"Retrieved {len(events)} events from API.")
             for event in events:
