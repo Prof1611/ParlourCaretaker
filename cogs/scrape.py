@@ -81,23 +81,26 @@ class Scrape(commands.Cog):
             response = requests.get(url)
             response.raise_for_status()  # Raise an exception for bad responses
             data = response.json()
-            logging.info(
-                f"Full API response: {data}"
-            )  # Temporary debug: log entire response
+            logging.info(f"Full API response: {data}")  # Debug: log the entire response
 
-            # Adjust this key based on the JSON structure returned by the API.
-            events = data.get("tour-events", [])
+            # Extract events from the "included" array where type is "tour-events"
+            included = data.get("included", [])
+            events = [event for event in included if event.get("type") == "tour-events"]
             logging.info(f"Retrieved {len(events)} events from API.")
+
             for event in events:
-                # Adjust these key names based on the actual API response.
-                start_date = event.get("startDate", "")
-                end_date = event.get("endDate", "")
-                if end_date:
+                attributes = event.get("attributes", {})
+                # Use ISO date format from the API; adjust if needed.
+                start_date = attributes.get("starts-at-date-local", "")
+                end_date = attributes.get("ends-at-date-local", "")
+                if end_date and end_date != "None":
                     formatted_date = f"{start_date} - {end_date}"
                 else:
                     formatted_date = start_date
-                venue = event.get("venue", "")
-                location = event.get("location", "")
+
+                venue = attributes.get("venue-name", "")
+                # For location, we can use the formatted address
+                location = attributes.get("formatted-address", "")
                 entry = (formatted_date.lower(), venue.lower(), location.lower())
                 new_entries.append((formatted_date, venue, location))
                 logging.info(f"New entry found: {entry}")
@@ -138,6 +141,7 @@ class Scrape(commands.Cog):
     async def check_forum_threads(self, guild, interaction, new_entries):
         gigchats_id = self.config["gigchats_id"]
         gigchats_channel = guild.get_channel(gigchats_id)
+
         if gigchats_channel is None:
             logging.error(f"Channel with ID {gigchats_id} not found.")
             error_embed = discord.Embed(
@@ -152,6 +156,7 @@ class Scrape(commands.Cog):
             return 0
 
         new_threads_created = 0
+
         for entry in new_entries:
             event_date, venue, location = entry
             thread_title = event_date.title()
@@ -159,6 +164,7 @@ class Scrape(commands.Cog):
             logging.info(
                 f"Does thread '{thread_title}' with location '{location.title() if location else ''}' exist in channel '{gigchats_channel.name}'? {exists}"
             )
+
             if not exists:
                 try:
                     content = f"The Last Dinner Party at {venue.title() if venue else ''}, {location.title() if location else ''}"
@@ -198,6 +204,7 @@ class Scrape(commands.Cog):
                     audit_log(
                         f"{interaction.user.name} (ID: {interaction.user.id}) failed to create thread '{thread_title}' in channel #{gigchats_channel.name} (ID: {gigchats_channel.id}) due to HTTP error: {e}"
                     )
+
         return new_threads_created
 
     async def thread_exists(self, channel, thread_title, location):
@@ -219,6 +226,8 @@ class Scrape(commands.Cog):
 
     async def check_server_events(self, guild, interaction, new_entries):
         new_events_created = 0
+
+        # Load the event image from the root folder.
         try:
             with open("event-image.jpg", "rb") as img_file:
                 event_image = img_file.read()
@@ -226,7 +235,9 @@ class Scrape(commands.Cog):
             logging.error(f"Failed to load event image: {e}")
             event_image = None
 
+        # Refresh the scheduled events list.
         scheduled_events = await guild.fetch_scheduled_events()
+
         for entry in new_entries:
             event_date, venue, location = entry
             event_name = f"{event_date.title()} - {venue.title() if venue else ''}"
@@ -279,6 +290,7 @@ class Scrape(commands.Cog):
                     audit_log(
                         f"{interaction.user.name} (ID: {interaction.user.id}) failed to create scheduled event '{event_name}' in guild '{guild.name}' (ID: {guild.id}) due to HTTP error: {e}"
                     )
+
         return new_events_created
 
     async def send_combined_summary(
