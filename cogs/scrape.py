@@ -13,6 +13,7 @@ import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import platform
+import subprocess
 
 
 def audit_log(message: str):
@@ -93,6 +94,13 @@ class Scrape(commands.Cog):
         try:
             if system_os == "Windows":
                 driver_path = ChromeDriverManager().install()
+                try:
+                    result = subprocess.run([driver_path], capture_output=True, text=True)
+                    logging.info(f"Manual driver test stdout: {result.stdout}")
+                    logging.info(f"Manual driver test stderr: {result.stderr}")
+                    logging.info(f"Manual driver test return code: {result.returncode}")
+                except Exception as e:
+                    logging.error(f"Manual driver test failed: {e}")
                 os.chmod(driver_path, 0o755)
                 driver = webdriver.Chrome(
                     service=Service(driver_path),
