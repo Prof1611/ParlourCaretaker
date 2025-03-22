@@ -40,25 +40,20 @@ class Scrape(commands.Cog):
     )
     async def scrape(self, interaction: discord.Interaction):
         await interaction.response.defer()
-        # Log the invocation of the scrape command.
         audit_log(
             f"{interaction.user.name} (ID: {interaction.user.id}) invoked /scrape command in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
         )
         try:
-            # Run the scraper asynchronously in a separate thread.
             new_entries = await asyncio.to_thread(self.run_scraper)
             audit_log(
                 f"{interaction.user.name} (ID: {interaction.user.id}) retrieved {len(new_entries)} new entries from the website."
             )
-            # Create forum threads and get count.
             threads_created = await self.check_forum_threads(
                 interaction.guild, interaction, new_entries
             )
-            # Create scheduled events and get count.
             events_created = await self.check_server_events(
                 interaction.guild, interaction, new_entries
             )
-            # Send a combined summary.
             await self.send_combined_summary(
                 interaction, threads_created, events_created
             )
@@ -91,7 +86,6 @@ class Scrape(commands.Cog):
 
         os.environ["WDM_LOG_LEVEL"] = "3"
 
-        # Detect the operating system.
         system_os = platform.system()
         arch = platform.machine()
         logging.info(f"Detected OS: {system_os}, Architecture: {arch}")
@@ -107,12 +101,15 @@ class Scrape(commands.Cog):
                 chrome_options.binary_location = "/usr/bin/chromium-browser"
                 chromedriver_path = "/usr/bin/chromedriver"
                 if not os.path.exists(chromedriver_path):
-                    logging.error(
-                        "Chromedriver not found! Make sure it's installed at /usr/bin/chromedriver."
-                    )
+                    logging.error("Chromedriver not found at /usr/bin/chromedriver.")
                     return []
                 service = Service(chromedriver_path)
                 driver = webdriver.Chrome(service=service, options=chrome_options)
+            elif system_os == "Linux" and arch == "x86_64":
+                driver = webdriver.Chrome(
+                    service=Service(ChromeDriverManager().install()),
+                    options=chrome_options,
+                )
             else:
                 logging.error("Unsupported OS for this scraper.")
                 return []
@@ -205,9 +202,7 @@ class Scrape(commands.Cog):
             event_date = entry[0]
             venue = entry[1]
             location = entry[2]
-            # The thread title is just the date.
             thread_title = event_date.title()
-            # Check if a thread exists with the matching title and that its starter message contains the location.
             exists = await self.thread_exists(gigchats_channel, thread_title, location)
             logging.info(
                 f"Does thread '{thread_title}' with location '{location.title()}' exist in channel '{gigchats_channel.name}'? {exists}"
@@ -258,15 +253,13 @@ class Scrape(commands.Cog):
         return new_threads_created
 
     async def thread_exists(self, channel, thread_title, location):
-        """Check if a thread exists with the given title and if its starter message contains the location."""
         normalized_title = thread_title.strip().lower()
         normalized_location = location.strip().lower()
         for thread in channel.threads:
             if thread.name.strip().lower() == normalized_title:
                 try:
-                    # Fetch the starter message of the thread.
                     starter_message = await thread.fetch_message(thread.id)
-                except Exception as e:
+                except Exception:
                     continue
                 if normalized_location in starter_message.content.lower():
                     return True
@@ -274,8 +267,6 @@ class Scrape(commands.Cog):
 
     async def check_server_events(self, guild, interaction, new_entries):
         new_events_created = 0
-
-        # Load the event image from the root folder.
         try:
             with open("event-image.jpg", "rb") as img_file:
                 event_image = img_file.read()
@@ -283,15 +274,11 @@ class Scrape(commands.Cog):
             logging.error(f"Failed to load event image: {e}")
             event_image = None
 
-        # Refresh the scheduled events list.
         scheduled_events = await guild.fetch_scheduled_events()
 
         for entry in new_entries:
-            event_date = entry[0]
-            venue = entry[1]
-            location = entry[2]
+            event_date, venue, location = entry
             event_name = f"{event_date.title()} - {venue.title()}"
-
             exists = any(e.name.lower() == event_name.lower() for e in scheduled_events)
             logging.info(
                 f"Does scheduled event '{event_name}' exist in guild '{guild.name}'? {exists}"
@@ -325,9 +312,6 @@ class Scrape(commands.Cog):
                         color=discord.Color.red(),
                     )
                     await interaction.followup.send(embed=error_embed)
-                    audit_log(
-                        f"{interaction.user.name} (ID: {interaction.user.id}) encountered permission error creating scheduled event '{event_name}' in guild '{guild.name}' (ID: {guild.id})."
-                    )
                 except discord.HTTPException as e:
                     logging.error(
                         f"Failed to create scheduled event '{event_name}': {e}"
@@ -338,15 +322,10 @@ class Scrape(commands.Cog):
                         color=discord.Color.red(),
                     )
                     await interaction.followup.send(embed=error_embed)
-                    audit_log(
-                        f"{interaction.user.name} (ID: {interaction.user.id}) failed to create scheduled event '{event_name}' in guild '{guild.name}' (ID: {guild.id}) due to HTTP error: {e}"
-                    )
 
         return new_events_created
 
-    async def send_combined_summary(
-        self, interaction, threads_created: int, events_created: int
-    ):
+    async def send_combined_summary(self, interaction, threads_created, events_created):
         description = (
             f"**Forum Threads:** {threads_created} new thread{'s' if threads_created != 1 else ''} created.\n"
             f"**Scheduled Events:** {events_created} new scheduled event{'s' if events_created != 1 else ''} created."
