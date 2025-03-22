@@ -8,6 +8,8 @@ import asyncio
 import logging
 from dotenv import load_dotenv
 import datetime
+import subprocess
+import sys
 
 # Load environment variables from .env file
 load_dotenv()
@@ -144,6 +146,16 @@ async def load_cogs():
             await bot.load_extension(f"cogs.{filename[:-3]}")
             audit_log(f"Loaded cog: {filename[:-3]}")
 
+
+def install_playwright_browsers():
+    try:
+        # Attempt to install the browsers
+        subprocess.run([sys.executable, "-m", "playwright", "install"], check=True)
+        print("Playwright browsers installed successfully.")
+    except subprocess.CalledProcessError as e:
+        print("Error installing Playwright browsers:", e)
+
+install_playwright_browsers()
 
 async def main():
     async with bot:
