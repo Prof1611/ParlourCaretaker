@@ -14,7 +14,8 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import re
 import platform
-import requests  # New import for API requests
+import requests  # For API requests
+import unicodedata
 
 
 def audit_log(message: str):
@@ -22,6 +23,17 @@ def audit_log(message: str):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open("audit.log", "a", encoding="utf-8") as f:
         f.write(f"[{timestamp}] {message}\n")
+
+
+def normalize_string(s: str) -> str:
+    """Normalize a string by removing diacritics and converting to lowercase."""
+    return (
+        unicodedata.normalize("NFKD", s)
+        .encode("ASCII", "ignore")
+        .decode("utf-8")
+        .strip()
+        .lower()
+    )
 
 
 class Scrape(commands.Cog):
@@ -42,7 +54,6 @@ class Scrape(commands.Cog):
     )
     async def scrape(self, interaction: discord.Interaction):
         await interaction.response.defer()
-        # Log the invocation of the scrape command.
         audit_log(
             f"{interaction.user.name} (ID: {interaction.user.id}) invoked /scrape command in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
         )
@@ -90,22 +101,20 @@ class Scrape(commands.Cog):
             data = response.json()
             logging.info(f"Full API response: {data}")  # Debug: log the entire response
 
-            # The API returns events in the "included" array
+            # Extract events from the "included" array where type is "tour-events"
             included = data.get("included", [])
             events = [event for event in included if event.get("type") == "tour-events"]
             logging.info(f"Retrieved {len(events)} events from API.")
 
             for event in events:
                 attributes = event.get("attributes", {})
-                # Retrieve dates from the API; these are in ISO format (YYYY-MM-DD)
                 start_date = attributes.get("starts-at-date-local", "")
                 end_date = attributes.get("ends-at-date-local", "")
-                # Convert ISO dates to the desired "DD Month YYYY" format using our helper
+                # Convert ISO date to "DD Month YYYY" using a helper
                 if start_date:
                     formatted_start = self.format_api_date(start_date)
                 else:
                     formatted_start = ""
-                # Only include an end date if it exists and is different from the start date
                 if end_date and end_date.lower() != "none" and end_date != start_date:
                     formatted_end = self.format_api_date(end_date)
                     formatted_date = f"{formatted_start} - {formatted_end}"
@@ -114,10 +123,11 @@ class Scrape(commands.Cog):
 
                 venue = attributes.get("venue-name", "")
                 location = attributes.get("formatted-address", "")
-                # Use the same tuple format as before
-                entry = (formatted_date.lower(), venue.lower(), location.lower())
-                new_entries.append((formatted_date, venue, location))
-                logging.info(f"New entry found: {entry}")
+                entry = (formatted_date, venue, location)
+                new_entries.append(entry)
+                logging.info(
+                    f"New entry found: ({formatted_date.lower()}, {venue.lower()}, {location.lower()})"
+                )
         except Exception as e:
             logging.error(f"An error occurred during API scraping: {e}")
         return new_entries
@@ -135,7 +145,7 @@ class Scrape(commands.Cog):
             return iso_date_str
 
     def format_date(self, date_str):
-        # Original method remains unchanged.
+        # Original method for page-based dates remains unchanged.
         if "-" in date_str:
             start_date_str, end_date_str = map(str.strip, date_str.split("-"))
             start_date = datetime.strptime(start_date_str, "%b %d, %Y").strftime(
@@ -179,7 +189,6 @@ class Scrape(commands.Cog):
     async def check_forum_threads(self, guild, interaction, new_entries):
         gigchats_id = self.config["gigchats_id"]
         gigchats_channel = guild.get_channel(gigchats_id)
-
         if gigchats_channel is None:
             logging.error(f"Channel with ID {gigchats_id} not found.")
             error_embed = discord.Embed(
@@ -194,16 +203,18 @@ class Scrape(commands.Cog):
             return 0
 
         new_threads_created = 0
-
         for entry in new_entries:
             event_date, venue, location = entry
             thread_title = event_date.title()
-            # Check if a thread exists with the matching title and that its starter message contains the location.
-            exists = await self.thread_exists(gigchats_channel, thread_title, location)
-            logging.info(
-                f"Does thread '{thread_title}' with location '{location.title()}' exist in channel '{gigchats_channel.name}'? {exists}"
+            # Use normalized strings for comparison
+            norm_title = normalize_string(thread_title)
+            norm_location = normalize_string(location)
+            exists = await self.thread_exists(
+                gigchats_channel, norm_title, norm_location
             )
-
+            logging.info(
+                f"Does thread '{thread_title}' with location '{location}' exist in channel '{gigchats_channel.name}'? {exists}"
+            )
             if not exists:
                 try:
                     content = (
@@ -245,28 +256,26 @@ class Scrape(commands.Cog):
                     audit_log(
                         f"{interaction.user.name} (ID: {interaction.user.id}) failed to create thread '{thread_title}' in channel #{gigchats_channel.name} (ID: {gigchats_channel.id}) due to HTTP error: {e}"
                     )
-
         return new_threads_created
 
     async def thread_exists(self, channel, thread_title, location):
         """Check if a thread exists with the given title and if its starter message contains the location."""
-        normalized_title = thread_title.strip().lower()
-        normalized_location = location.strip().lower()
+        norm_title = normalize_string(thread_title)
+        norm_location = normalize_string(location)
         for thread in channel.threads:
-            if thread.name.strip().lower() == normalized_title:
+            if normalize_string(thread.name) == norm_title:
                 try:
-                    # Fetch the starter message of the thread.
                     starter_message = await thread.fetch_message(thread.id)
-                except Exception as e:
+                except Exception:
                     continue
-                if normalized_location in starter_message.content.lower():
+                if norm_location and norm_location in normalize_string(
+                    starter_message.content
+                ):
                     return True
         return False
 
     async def check_server_events(self, guild, interaction, new_entries):
         new_events_created = 0
-
-        # Load the event image from the root folder.
         try:
             with open("event-image.jpg", "rb") as img_file:
                 event_image = img_file.read()
@@ -274,13 +283,14 @@ class Scrape(commands.Cog):
             logging.error(f"Failed to load event image: {e}")
             event_image = None
 
-        # Refresh the scheduled events list.
         scheduled_events = await guild.fetch_scheduled_events()
-
         for entry in new_entries:
             event_date, venue, location = entry
-            event_name = f"{event_date.title()} - {venue.title()}"
-            exists = any(e.name.lower() == event_name.lower() for e in scheduled_events)
+            event_name = f"{event_date.title()} - {venue.title() if venue else ''}"
+            norm_event_name = normalize_string(event_name)
+            exists = any(
+                normalize_string(e.name) == norm_event_name for e in scheduled_events
+            )
             logging.info(
                 f"Does scheduled event '{event_name}' exist in guild '{guild.name}'? {exists}"
             )
@@ -289,10 +299,10 @@ class Scrape(commands.Cog):
                 try:
                     await guild.create_scheduled_event(
                         name=event_name,
-                        description=f"The Last Dinner Party at {venue.title()}, {location.title()}",
+                        description=f"The Last Dinner Party at {venue.title() if venue else ''}, {location.title() if location else ''}",
                         start_time=start_time,
                         end_time=end_time,
-                        location=f"{venue.title()}, {location.title()}",
+                        location=f"{venue.title() if venue else ''}, {location.title() if location else ''}",
                         entity_type=discord.EntityType.external,
                         image=event_image,
                         privacy_level=discord.PrivacyLevel.guild_only,
@@ -329,7 +339,6 @@ class Scrape(commands.Cog):
                     audit_log(
                         f"{interaction.user.name} (ID: {interaction.user.id}) failed to create scheduled event '{event_name}' in guild '{guild.name}' (ID: {guild.id}) due to HTTP error: {e}"
                     )
-
         return new_events_created
 
     async def send_combined_summary(
