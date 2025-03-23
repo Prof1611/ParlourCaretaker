@@ -34,6 +34,7 @@ class Scrape(commands.Cog):
         # Load the config file with UTF-8 encoding.
         with open("config.yaml", "r", encoding="utf-8") as config_file:
             self.config = yaml.safe_load(config_file)
+        audit_log("Scrape cog initialised and configuration loaded successfully.")
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -50,6 +51,7 @@ class Scrape(commands.Cog):
             f"{interaction.user.name} (ID: {interaction.user.id}) invoked /scrape command in guild '{interaction.guild.name}' (ID: {interaction.guild.id})."
         )
         try:
+            audit_log("Starting scraping process via /scrape command.")
             # Run the scraper asynchronously in a separate thread.
             new_entries = await asyncio.to_thread(self.run_scraper)
             audit_log(
@@ -70,6 +72,7 @@ class Scrape(commands.Cog):
             logging.info(
                 f"Full scrape and creation process done: {threads_created} threads, {events_created} events created."
             )
+            audit_log("Scrape process completed successfully.")
         except Exception as e:
             logging.error(f"An error occurred in the scrape command: {e}")
             audit_log(
@@ -84,6 +87,7 @@ class Scrape(commands.Cog):
 
     def run_scraper(self):
         logging.info("Running scraper using Seated API...")
+        audit_log("Starting scraper: Requesting event data from Seated API.")
         new_entries = []
         try:
             # API endpoint that returns event data (powered by Seated)
@@ -97,6 +101,7 @@ class Scrape(commands.Cog):
             included = data.get("included", [])
             events = [event for event in included if event.get("type") == "tour-events"]
             logging.info(f"Retrieved {len(events)} events from API.")
+            audit_log(f"Scraped API: Retrieved {len(events)} events.")
 
             for event in events:
                 attributes = event.get("attributes", {})
@@ -119,8 +124,12 @@ class Scrape(commands.Cog):
                 logging.debug(
                     f"New entry found: ({normalize_string(formatted_date)}, {normalize_string(venue)}, {normalize_string(location)})"
                 )
+            audit_log(
+                f"Finished processing API events. Total new entries: {len(new_entries)}."
+            )
         except Exception as e:
             logging.error(f"An error occurred during API scraping: {e}")
+            audit_log(f"Error during API scraping: {e}")
         return new_entries
 
     def format_api_date(self, iso_date_str):
@@ -130,16 +139,21 @@ class Scrape(commands.Cog):
         """
         try:
             dt = datetime.strptime(iso_date_str, "%Y-%m-%d")
-            return dt.strftime("%d %B %Y")
+            formatted_date = dt.strftime("%d %B %Y")
+            audit_log(f"Formatted API date '{iso_date_str}' to '{formatted_date}'.")
+            return formatted_date
         except Exception as e:
             logging.error(f"Error formatting API date '{iso_date_str}': {e}")
+            audit_log(f"Error formatting API date '{iso_date_str}': {e}")
             return iso_date_str
 
     def format_date(self, date_str):
         # Original method for page-based dates remains unchanged.
         if "-" in date_str:
             start_date_str, end_date_str = map(str.strip, date_str.split("-"))
-            start_date = datetime.strptime(start_date_str, "%b %d, %Y").strftime("%d %B %Y")
+            start_date = datetime.strptime(start_date_str, "%b %d, %Y").strftime(
+                "%d %B %Y"
+            )
             end_date = datetime.strptime(end_date_str, "%b %d, %Y").strftime("%d %B %Y")
             return f"{start_date} - {end_date}"
         else:
@@ -159,20 +173,29 @@ class Scrape(commands.Cog):
                 start_date_str, end_date_str = map(str.strip, formatted_date.split("-"))
                 dt_start = datetime.strptime(start_date_str, "%d %B %Y")
                 dt_end = datetime.strptime(end_date_str, "%d %B %Y")
-                start_dt = datetime(dt_start.year, dt_start.month, dt_start.day, 8, 0, 0, tzinfo=tz)
-                end_dt = datetime(dt_end.year, dt_end.month, dt_end.day, 23, 0, 0, tzinfo=tz)
+                start_dt = datetime(
+                    dt_start.year, dt_start.month, dt_start.day, 8, 0, 0, tzinfo=tz
+                )
+                end_dt = datetime(
+                    dt_end.year, dt_end.month, dt_end.day, 23, 0, 0, tzinfo=tz
+                )
             else:
                 dt = datetime.strptime(formatted_date, "%d %B %Y")
                 start_dt = datetime(dt.year, dt.month, dt.day, 19, 0, 0, tzinfo=tz)
                 end_dt = datetime(dt.year, dt.month, dt.day, 23, 0, 0, tzinfo=tz)
-            logging.debug(f"Parsed event dates from '{formatted_date}' -> start: {start_dt}, end: {end_dt}")
+            logging.debug(
+                f"Parsed event dates from '{formatted_date}' -> start: {start_dt}, end: {end_dt}"
+            )
+            audit_log(f"Successfully parsed event dates for '{formatted_date}'.")
             return start_dt, end_dt
         except Exception as e:
             logging.error(f"Error parsing event dates from '{formatted_date}': {e}")
+            audit_log(f"Error parsing event dates from '{formatted_date}': {e}")
             now = datetime.now(ZoneInfo("Europe/London"))
             return now, now + timedelta(hours=4)
 
     async def check_forum_threads(self, guild, interaction, new_entries):
+        audit_log("Starting check for forum threads for new entries.")
         gigchats_id = self.config["gigchats_id"]
         gigchats_channel = guild.get_channel(gigchats_id)
         if gigchats_channel is None:
@@ -194,14 +217,24 @@ class Scrape(commands.Cog):
             thread_title = event_date.title()
             norm_title = normalize_string(thread_title)
             norm_location = normalize_string(location)
-            logging.debug(f"Checking thread: original title='{thread_title}', normalized='{norm_title}', location normalized='{norm_location}'")
-            exists = await self.thread_exists(gigchats_channel, norm_title, norm_location)
+            logging.debug(
+                f"Checking thread: original title='{thread_title}', normalized='{norm_title}', location normalized='{norm_location}'"
+            )
+            exists = await self.thread_exists(
+                gigchats_channel, norm_title, norm_location
+            )
             logging.info(
                 f"Does thread '{thread_title}' with location '{location}' exist in channel '{gigchats_channel.name}'? {exists}"
             )
+            if exists:
+                audit_log(
+                    f"Skipping thread creation for '{thread_title}' as it already exists."
+                )
             if not exists:
                 try:
-                    content = f"The Last Dinner Party at {venue.title()}, {location.title()}"
+                    content = (
+                        f"The Last Dinner Party at {venue.title()}, {location.title()}"
+                    )
                     logging.info(f"Creating thread for: {thread_title}")
                     await gigchats_channel.create_thread(
                         name=thread_title,
@@ -215,7 +248,9 @@ class Scrape(commands.Cog):
                     )
                     await asyncio.sleep(5)
                 except discord.Forbidden:
-                    logging.error(f"Permission denied when trying to create thread '{thread_title}'")
+                    logging.error(
+                        f"Permission denied when trying to create thread '{thread_title}'"
+                    )
                     error_embed = discord.Embed(
                         title="Error",
                         description=f"Permission denied when trying to create thread '{thread_title}'.",
@@ -236,68 +271,111 @@ class Scrape(commands.Cog):
                     audit_log(
                         f"{interaction.user.name} (ID: {interaction.user.id}) failed to create thread '{thread_title}' in channel #{gigchats_channel.name} (ID: {gigchats_channel.id}) due to HTTP error: {e}"
                     )
+        audit_log(
+            f"Forum threads check complete. New threads created: {new_threads_created}."
+        )
         return new_threads_created
 
     async def thread_exists(self, channel, thread_title, location):
         """Check if a thread exists with the given title and if its starter message contains the location."""
         norm_title = normalize_string(thread_title)
         norm_location = normalize_string(location)
-        logging.debug(f"Checking existence for thread with normalized title '{norm_title}' and location '{norm_location}'")
+        logging.debug(
+            f"Checking existence for thread with normalized title '{norm_title}' and location '{norm_location}'"
+        )
         try:
             threads = channel.threads
-            logging.debug(f"Channel '{channel.name}' has {len(threads)} active threads.")
+            logging.debug(
+                f"Channel '{channel.name}' has {len(threads)} active threads."
+            )
         except Exception as e:
             logging.error(f"Error accessing channel threads: {e}")
             threads = []
         for thread in threads:
             thread_norm = normalize_string(thread.name)
-            logging.debug(f"Comparing with thread: original name='{thread.name}', normalized='{thread_norm}'")
+            logging.debug(
+                f"Comparing with thread: original name='{thread.name}', normalized='{thread_norm}'"
+            )
             if thread_norm == norm_title:
                 try:
                     starter_message = await thread.fetch_message(thread.id)
                     message_norm = normalize_string(starter_message.content)
-                    logging.debug(f"Starter message for thread '{thread.name}' normalized to: '{message_norm}'")
+                    logging.debug(
+                        f"Starter message for thread '{thread.name}' normalized to: '{message_norm}'"
+                    )
+                    if norm_location and norm_location in message_norm:
+                        logging.debug(
+                            f"Found matching location '{norm_location}' in message for thread '{thread.name}'."
+                        )
+                        audit_log(
+                            f"Thread '{thread.name}' exists with matching location '{location}'."
+                        )
+                        return True
                 except Exception as e:
-                    logging.error(f"Error fetching starter message for thread '{thread.name}': {e}")
-                    return True  # Assume thread exists if we can't fetch the message
-                if norm_location and norm_location in message_norm:
-                    logging.debug(f"Found matching location '{norm_location}' in message for thread '{thread.name}'.")
+                    logging.error(
+                        f"Error fetching starter message for thread '{thread.name}': {e}"
+                    )
+                    audit_log(
+                        f"Assuming thread '{thread.name}' exists due to error fetching its message."
+                    )
                     return True
         # Fallback: check scheduled events for matching thread title
         try:
             scheduled_events = await channel.guild.fetch_scheduled_events()
-            logging.debug(f"Fetched {len(scheduled_events)} scheduled events for guild '{channel.guild.name}'.")
+            logging.debug(
+                f"Fetched {len(scheduled_events)} scheduled events for guild '{channel.guild.name}'."
+            )
             for event in scheduled_events:
                 normalized_event_name = normalize_string(event.name)
-                logging.debug(f"Comparing with scheduled event: original name='{event.name}', normalized='{normalized_event_name}'")
+                logging.debug(
+                    f"Comparing with scheduled event: original name='{event.name}', normalized='{normalized_event_name}'"
+                )
                 # Use startswith to allow for extra details in scheduled event names
                 if normalized_event_name.startswith(norm_title):
-                    logging.debug(f"Match found in scheduled events: '{normalized_event_name}' starts with '{norm_title}'")
+                    logging.debug(
+                        f"Match found in scheduled events: '{normalized_event_name}' starts with '{norm_title}'"
+                    )
+                    audit_log(
+                        f"Scheduled event '{event.name}' exists with similar title to '{thread_title}'."
+                    )
                     return True
         except Exception as e:
             logging.error(f"Error fetching scheduled events: {e}")
+            audit_log(
+                f"Error fetching scheduled events while checking thread existence: {e}"
+            )
         return False
 
     async def check_server_events(self, guild, interaction, new_entries):
+        audit_log("Starting check for scheduled events for new entries.")
         new_events_created = 0
         try:
             with open("event-image.jpg", "rb") as img_file:
                 event_image = img_file.read()
         except Exception as e:
             logging.error(f"Failed to load event image: {e}")
+            audit_log(f"Failed to load event image: {e}")
             event_image = None
 
         scheduled_events = await guild.fetch_scheduled_events()
-        logging.debug(f"Guild '{guild.name}' has {len(scheduled_events)} scheduled events.")
+        logging.debug(
+            f"Guild '{guild.name}' has {len(scheduled_events)} scheduled events."
+        )
         for entry in new_entries:
             event_date, venue, location = entry
             event_name = f"{event_date.title()} - {venue.title() if venue else ''}"
             norm_event_name = normalize_string(event_name)
             logging.debug(f"Normalized scheduled event name: '{norm_event_name}'")
-            exists = any(normalize_string(e.name) == norm_event_name for e in scheduled_events)
+            exists = any(
+                normalize_string(e.name) == norm_event_name for e in scheduled_events
+            )
             logging.info(
                 f"Does scheduled event '{event_name}' exist in guild '{guild.name}'? {exists}"
             )
+            if exists:
+                audit_log(
+                    f"Skipping creation of scheduled event '{event_name}' as it already exists."
+                )
             if not exists:
                 start_time, end_time = self.parse_event_dates(event_date)
                 try:
@@ -318,7 +396,9 @@ class Scrape(commands.Cog):
                     )
                     await asyncio.sleep(5)
                 except discord.Forbidden:
-                    logging.error(f"Permission denied when trying to create scheduled event '{event_name}'")
+                    logging.error(
+                        f"Permission denied when trying to create scheduled event '{event_name}'"
+                    )
                     error_embed = discord.Embed(
                         title="Error",
                         description=f"Permission denied when trying to create scheduled event '{event_name}'.",
@@ -329,7 +409,9 @@ class Scrape(commands.Cog):
                         f"{interaction.user.name} (ID: {interaction.user.id}) encountered permission error creating scheduled event '{event_name}' in guild '{guild.name}' (ID: {guild.id})."
                     )
                 except discord.HTTPException as e:
-                    logging.error(f"Failed to create scheduled event '{event_name}': {e}")
+                    logging.error(
+                        f"Failed to create scheduled event '{event_name}': {e}"
+                    )
                     error_embed = discord.Embed(
                         title="Error",
                         description=f"Failed to create scheduled event '{event_name}': `{e}`",
@@ -339,9 +421,14 @@ class Scrape(commands.Cog):
                     audit_log(
                         f"{interaction.user.name} (ID: {interaction.user.id}) failed to create scheduled event '{event_name}' in guild '{guild.name}' (ID: {guild.id}) due to HTTP error: {e}"
                     )
+        audit_log(
+            f"Scheduled events check complete. New events created: {new_events_created}."
+        )
         return new_events_created
 
-    async def send_combined_summary(self, interaction, threads_created: int, events_created: int):
+    async def send_combined_summary(
+        self, interaction, threads_created: int, events_created: int
+    ):
         if threads_created == 0 and events_created == 0:
             description = "All up to date! No new threads or scheduled events created."
         else:
@@ -352,10 +439,15 @@ class Scrape(commands.Cog):
         embed = discord.Embed(
             title="Scrape Completed",
             description=description,
-            color=(discord.Color.green() if (threads_created or events_created) else discord.Color.blurple()),
+            color=(
+                discord.Color.green()
+                if (threads_created or events_created)
+                else discord.Color.blurple()
+            ),
         )
         logging.debug(f"Sending summary embed with description: {description}")
         await interaction.followup.send(embed=embed)
+        audit_log("Combined summary sent to user with details: " + description)
 
     async def setup_audit(self, interaction):
         audit_log(
