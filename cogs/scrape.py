@@ -23,8 +23,11 @@ def normalize_string(s: str) -> str:
     Normalize a string by removing diacritics, punctuation, extra whitespace,
     and converting to lowercase.
     """
+    # Remove diacritics
     s = unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("utf-8")
+    # Remove punctuation
     s = s.translate(str.maketrans("", "", string.punctuation))
+    # Collapse extra whitespace and convert to lowercase
     return " ".join(s.split()).lower()
 
 
@@ -89,7 +92,7 @@ class Scrape(commands.Cog):
             # API endpoint that returns event data (powered by Seated)
             url = "https://cdn.seated.com/api/tour/deb5e9f0-4af5-413c-a24b-1b22f11513b2?include=tour-events"
             response = requests.get(url)
-            response.raise_for_status()
+            response.raise_for_status()  # Raise an exception for bad responses
             data = response.json()
             logging.debug(f"Full API response: {data}")  # Debug: log entire response
 
@@ -139,9 +142,7 @@ class Scrape(commands.Cog):
         # Original method for page-based dates remains unchanged.
         if "-" in date_str:
             start_date_str, end_date_str = map(str.strip, date_str.split("-"))
-            start_date = datetime.strptime(start_date_str, "%b %d, %Y").strftime(
-                "%d %B %Y"
-            )
+            start_date = datetime.strptime(start_date_str, "%b %d, %Y").strftime("%d %B %Y")
             end_date = datetime.strptime(end_date_str, "%b %d, %Y").strftime("%d %B %Y")
             return f"{start_date} - {end_date}"
         else:
@@ -161,12 +162,8 @@ class Scrape(commands.Cog):
                 start_date_str, end_date_str = map(str.strip, formatted_date.split("-"))
                 dt_start = datetime.strptime(start_date_str, "%d %B %Y")
                 dt_end = datetime.strptime(end_date_str, "%d %B %Y")
-                start_dt = datetime(
-                    dt_start.year, dt_start.month, dt_start.day, 8, 0, 0, tzinfo=tz
-                )
-                end_dt = datetime(
-                    dt_end.year, dt_end.month, dt_end.day, 23, 0, 0, tzinfo=tz
-                )
+                start_dt = datetime(dt_start.year, dt_start.month, dt_start.day, 8, 0, 0, tzinfo=tz)
+                end_dt = datetime(dt_end.year, dt_end.month, dt_end.day, 23, 0, 0, tzinfo=tz)
             else:
                 dt = datetime.strptime(formatted_date, "%d %B %Y")
                 start_dt = datetime(dt.year, dt.month, dt.day, 19, 0, 0, tzinfo=tz)
@@ -199,17 +196,13 @@ class Scrape(commands.Cog):
             thread_title = event_date.title()
             norm_title = normalize_string(thread_title)
             norm_location = normalize_string(location)
-            exists = await self.thread_exists(
-                gigchats_channel, norm_title, norm_location
-            )
+            exists = await self.thread_exists(gigchats_channel, norm_title, norm_location)
             logging.info(
                 f"Does thread '{thread_title}' with location '{location}' exist in channel '{gigchats_channel.name}'? {exists}"
             )
             if not exists:
                 try:
-                    content = (
-                        f"The Last Dinner Party at {venue.title()}, {location.title()}"
-                    )
+                    content = f"The Last Dinner Party at {venue.title()}, {location.title()}"
                     logging.info(f"Creating thread for: {thread_title}")
                     await gigchats_channel.create_thread(
                         name=thread_title,
@@ -223,9 +216,7 @@ class Scrape(commands.Cog):
                     )
                     await asyncio.sleep(5)
                 except discord.Forbidden:
-                    logging.error(
-                        f"Permission denied when trying to create thread '{thread_title}'"
-                    )
+                    logging.error(f"Permission denied when trying to create thread '{thread_title}'")
                     error_embed = discord.Embed(
                         title="Error",
                         description=f"Permission denied when trying to create thread '{thread_title}'.",
@@ -258,9 +249,7 @@ class Scrape(commands.Cog):
                     starter_message = await thread.fetch_message(thread.id)
                 except Exception:
                     continue
-                if norm_location and norm_location in normalize_string(
-                    starter_message.content
-                ):
+                if norm_location and norm_location in normalize_string(starter_message.content):
                     return True
         return False
 
@@ -278,9 +267,7 @@ class Scrape(commands.Cog):
             event_date, venue, location = entry
             event_name = f"{event_date.title()} - {venue.title() if venue else ''}"
             norm_event_name = normalize_string(event_name)
-            exists = any(
-                normalize_string(e.name) == norm_event_name for e in scheduled_events
-            )
+            exists = any(normalize_string(e.name) == norm_event_name for e in scheduled_events)
             logging.info(
                 f"Does scheduled event '{event_name}' exist in guild '{guild.name}'? {exists}"
             )
@@ -304,9 +291,7 @@ class Scrape(commands.Cog):
                     )
                     await asyncio.sleep(5)
                 except discord.Forbidden:
-                    logging.error(
-                        f"Permission denied when trying to create scheduled event '{event_name}'"
-                    )
+                    logging.error(f"Permission denied when trying to create scheduled event '{event_name}'")
                     error_embed = discord.Embed(
                         title="Error",
                         description=f"Permission denied when trying to create scheduled event '{event_name}'.",
@@ -317,9 +302,7 @@ class Scrape(commands.Cog):
                         f"{interaction.user.name} (ID: {interaction.user.id}) encountered permission error creating scheduled event '{event_name}' in guild '{guild.name}' (ID: {guild.id})."
                     )
                 except discord.HTTPException as e:
-                    logging.error(
-                        f"Failed to create scheduled event '{event_name}': {e}"
-                    )
+                    logging.error(f"Failed to create scheduled event '{event_name}': {e}")
                     error_embed = discord.Embed(
                         title="Error",
                         description=f"Failed to create scheduled event '{event_name}': `{e}`",
@@ -331,29 +314,19 @@ class Scrape(commands.Cog):
                     )
         return new_events_created
 
-    async def send_combined_summary(
-        self, interaction, threads_created: int, events_created: int
-    ):
+    async def send_combined_summary(self, interaction, threads_created: int, events_created: int):
         if threads_created == 0 and events_created == 0:
-            embed = discord.Embed(
-                title="Scrape Completed",
-                description="All up to date!",
-                color=discord.Color.green(),
-            )
+            description = "All up to date! No new threads or scheduled events created."
         else:
             description = (
                 f"**Forum Threads:** {threads_created} new thread{'s' if threads_created != 1 else ''} created.\n"
                 f"**Scheduled Events:** {events_created} new scheduled event{'s' if events_created != 1 else ''} created."
             )
-            embed = discord.Embed(
-                title="Scrape Completed",
-                description=description,
-                color=(
-                    discord.Color.green()
-                    if (threads_created or events_created)
-                    else discord.Color.blurple()
-                ),
-            )
+        embed = discord.Embed(
+            title="Scrape Completed",
+            description=description,
+            color=(discord.Color.green() if (threads_created or events_created) else discord.Color.blurple()),
+        )
         await interaction.followup.send(embed=embed)
 
     async def setup_audit(self, interaction):
