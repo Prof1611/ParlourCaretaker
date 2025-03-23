@@ -23,11 +23,8 @@ def normalize_string(s: str) -> str:
     Normalize a string by removing diacritics, punctuation, extra whitespace,
     and converting to lowercase.
     """
-    # Remove diacritics
     s = unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("utf-8")
-    # Remove punctuation
     s = s.translate(str.maketrans("", "", string.punctuation))
-    # Collapse extra whitespace and convert to lowercase
     return " ".join(s.split()).lower()
 
 
@@ -142,7 +139,9 @@ class Scrape(commands.Cog):
         # Original method for page-based dates remains unchanged.
         if "-" in date_str:
             start_date_str, end_date_str = map(str.strip, date_str.split("-"))
-            start_date = datetime.strptime(start_date_str, "%b %d, %Y").strftime("%d %B %Y")
+            start_date = datetime.strptime(start_date_str, "%b %d, %Y").strftime(
+                "%d %B %Y"
+            )
             end_date = datetime.strptime(end_date_str, "%b %d, %Y").strftime("%d %B %Y")
             return f"{start_date} - {end_date}"
         else:
@@ -162,8 +161,12 @@ class Scrape(commands.Cog):
                 start_date_str, end_date_str = map(str.strip, formatted_date.split("-"))
                 dt_start = datetime.strptime(start_date_str, "%d %B %Y")
                 dt_end = datetime.strptime(end_date_str, "%d %B %Y")
-                start_dt = datetime(dt_start.year, dt_start.month, dt_start.day, 8, 0, 0, tzinfo=tz)
-                end_dt = datetime(dt_end.year, dt_end.month, dt_end.day, 23, 0, 0, tzinfo=tz)
+                start_dt = datetime(
+                    dt_start.year, dt_start.month, dt_start.day, 8, 0, 0, tzinfo=tz
+                )
+                end_dt = datetime(
+                    dt_end.year, dt_end.month, dt_end.day, 23, 0, 0, tzinfo=tz
+                )
             else:
                 dt = datetime.strptime(formatted_date, "%d %B %Y")
                 start_dt = datetime(dt.year, dt.month, dt.day, 19, 0, 0, tzinfo=tz)
@@ -173,6 +176,16 @@ class Scrape(commands.Cog):
             logging.error(f"Error parsing event dates from '{formatted_date}': {e}")
             now = datetime.now(ZoneInfo("Europe/London"))
             return now, now + timedelta(hours=4)
+
+    async def get_all_threads(self, channel):
+        """Fetch both active and archived threads from a channel."""
+        all_threads = list(channel.threads)
+        try:
+            archived = await channel.fetch_archived_threads()
+            all_threads.extend(archived.threads)
+        except Exception as e:
+            logging.error(f"Error fetching archived threads: {e}")
+        return all_threads
 
     async def check_forum_threads(self, guild, interaction, new_entries):
         gigchats_id = self.config["gigchats_id"]
@@ -196,13 +209,17 @@ class Scrape(commands.Cog):
             thread_title = event_date.title()
             norm_title = normalize_string(thread_title)
             norm_location = normalize_string(location)
-            exists = await self.thread_exists(gigchats_channel, norm_title, norm_location)
+            exists = await self.thread_exists(
+                gigchats_channel, norm_title, norm_location
+            )
             logging.info(
                 f"Does thread '{thread_title}' with location '{location}' exist in channel '{gigchats_channel.name}'? {exists}"
             )
             if not exists:
                 try:
-                    content = f"The Last Dinner Party at {venue.title()}, {location.title()}"
+                    content = (
+                        f"The Last Dinner Party at {venue.title()}, {location.title()}"
+                    )
                     logging.info(f"Creating thread for: {thread_title}")
                     await gigchats_channel.create_thread(
                         name=thread_title,
@@ -216,7 +233,9 @@ class Scrape(commands.Cog):
                     )
                     await asyncio.sleep(5)
                 except discord.Forbidden:
-                    logging.error(f"Permission denied when trying to create thread '{thread_title}'")
+                    logging.error(
+                        f"Permission denied when trying to create thread '{thread_title}'"
+                    )
                     error_embed = discord.Embed(
                         title="Error",
                         description=f"Permission denied when trying to create thread '{thread_title}'.",
@@ -243,13 +262,17 @@ class Scrape(commands.Cog):
         """Check if a thread exists with the given title and if its starter message contains the location."""
         norm_title = normalize_string(thread_title)
         norm_location = normalize_string(location)
-        for thread in channel.threads:
+        threads = await self.get_all_threads(channel)
+        for thread in threads:
             if normalize_string(thread.name) == norm_title:
                 try:
                     starter_message = await thread.fetch_message(thread.id)
                 except Exception:
-                    continue
-                if norm_location and norm_location in normalize_string(starter_message.content):
+                    # If fetching fails, assume thread exists to prevent duplicates.
+                    return True
+                if norm_location and norm_location in normalize_string(
+                    starter_message.content
+                ):
                     return True
         return False
 
@@ -267,7 +290,9 @@ class Scrape(commands.Cog):
             event_date, venue, location = entry
             event_name = f"{event_date.title()} - {venue.title() if venue else ''}"
             norm_event_name = normalize_string(event_name)
-            exists = any(normalize_string(e.name) == norm_event_name for e in scheduled_events)
+            exists = any(
+                normalize_string(e.name) == norm_event_name for e in scheduled_events
+            )
             logging.info(
                 f"Does scheduled event '{event_name}' exist in guild '{guild.name}'? {exists}"
             )
@@ -291,7 +316,9 @@ class Scrape(commands.Cog):
                     )
                     await asyncio.sleep(5)
                 except discord.Forbidden:
-                    logging.error(f"Permission denied when trying to create scheduled event '{event_name}'")
+                    logging.error(
+                        f"Permission denied when trying to create scheduled event '{event_name}'"
+                    )
                     error_embed = discord.Embed(
                         title="Error",
                         description=f"Permission denied when trying to create scheduled event '{event_name}'.",
@@ -302,7 +329,9 @@ class Scrape(commands.Cog):
                         f"{interaction.user.name} (ID: {interaction.user.id}) encountered permission error creating scheduled event '{event_name}' in guild '{guild.name}' (ID: {guild.id})."
                     )
                 except discord.HTTPException as e:
-                    logging.error(f"Failed to create scheduled event '{event_name}': {e}")
+                    logging.error(
+                        f"Failed to create scheduled event '{event_name}': {e}"
+                    )
                     error_embed = discord.Embed(
                         title="Error",
                         description=f"Failed to create scheduled event '{event_name}': `{e}`",
@@ -314,7 +343,9 @@ class Scrape(commands.Cog):
                     )
         return new_events_created
 
-    async def send_combined_summary(self, interaction, threads_created: int, events_created: int):
+    async def send_combined_summary(
+        self, interaction, threads_created: int, events_created: int
+    ):
         if threads_created == 0 and events_created == 0:
             description = "All up to date! No new threads or scheduled events created."
         else:
@@ -325,7 +356,11 @@ class Scrape(commands.Cog):
         embed = discord.Embed(
             title="Scrape Completed",
             description=description,
-            color=(discord.Color.green() if (threads_created or events_created) else discord.Color.blurple()),
+            color=(
+                discord.Color.green()
+                if (threads_created or events_created)
+                else discord.Color.blurple()
+            ),
         )
         await interaction.followup.send(embed=embed)
 
