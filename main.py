@@ -40,7 +40,7 @@ formatter = CustomFormatter(
 )
 handler = logging.StreamHandler()
 handler.setFormatter(formatter)
-logging.basicConfig(level=logging.INFO, handlers=[handler])
+logging.basicConfig(level=logging.DEBUG, handlers=[handler])
 
 
 # Audit log function to write events to audit.log
