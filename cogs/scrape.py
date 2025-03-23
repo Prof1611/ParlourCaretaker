@@ -3,17 +3,9 @@ import logging
 import yaml
 from discord import app_commands
 from discord.ext import commands
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from webdriver_manager.chrome import ChromeDriverManager
-import os
 import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import re
-import platform
 import requests  # For API requests
 import unicodedata
 
@@ -26,14 +18,11 @@ def audit_log(message: str):
 
 
 def normalize_string(s: str) -> str:
-    """Normalize a string by removing diacritics and converting to lowercase."""
-    return (
-        unicodedata.normalize("NFKD", s)
-        .encode("ASCII", "ignore")
-        .decode("utf-8")
-        .strip()
-        .lower()
+    """Normalize a string by removing diacritics, extra whitespace, and converting to lowercase."""
+    normalized = (
+        unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("utf-8")
     )
+    return " ".join(normalized.split()).lower()
 
 
 class Scrape(commands.Cog):
@@ -110,7 +99,6 @@ class Scrape(commands.Cog):
                 attributes = event.get("attributes", {})
                 start_date = attributes.get("starts-at-date-local", "")
                 end_date = attributes.get("ends-at-date-local", "")
-                # Convert ISO date to "DD Month YYYY" using a helper
                 if start_date:
                     formatted_start = self.format_api_date(start_date)
                 else:
@@ -126,7 +114,7 @@ class Scrape(commands.Cog):
                 entry = (formatted_date, venue, location)
                 new_entries.append(entry)
                 logging.info(
-                    f"New entry found: ({formatted_date.lower()}, {venue.lower()}, {location.lower()})"
+                    f"New entry found: ({normalize_string(formatted_date)}, {normalize_string(venue)}, {normalize_string(location)})"
                 )
         except Exception as e:
             logging.error(f"An error occurred during API scraping: {e}")
@@ -206,7 +194,6 @@ class Scrape(commands.Cog):
         for entry in new_entries:
             event_date, venue, location = entry
             thread_title = event_date.title()
-            # Use normalized strings for comparison
             norm_title = normalize_string(thread_title)
             norm_location = normalize_string(location)
             exists = await self.thread_exists(
