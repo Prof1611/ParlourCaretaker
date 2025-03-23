@@ -177,16 +177,6 @@ class Scrape(commands.Cog):
             now = datetime.now(ZoneInfo("Europe/London"))
             return now, now + timedelta(hours=4)
 
-    async def get_all_threads(self, channel):
-        """Fetch both active and archived threads from a channel."""
-        all_threads = list(channel.threads)
-        try:
-            archived = await channel.fetch_archived_threads()
-            all_threads.extend(archived.threads)
-        except Exception as e:
-            logging.error(f"Error fetching archived threads: {e}")
-        return all_threads
-
     async def check_forum_threads(self, guild, interaction, new_entries):
         gigchats_id = self.config["gigchats_id"]
         gigchats_channel = guild.get_channel(gigchats_id)
@@ -262,14 +252,20 @@ class Scrape(commands.Cog):
         """Check if a thread exists with the given title and if its starter message contains the location."""
         norm_title = normalize_string(thread_title)
         norm_location = normalize_string(location)
-        threads = await self.get_all_threads(channel)
+        try:
+            threads = channel.threads
+        except Exception as e:
+            logging.error(f"Error accessing channel threads: {e}")
+            return False
         for thread in threads:
             if normalize_string(thread.name) == norm_title:
                 try:
                     starter_message = await thread.fetch_message(thread.id)
-                except Exception:
-                    # If fetching fails, assume thread exists to prevent duplicates.
-                    return True
+                except Exception as e:
+                    logging.error(
+                        f"Error fetching starter message for thread '{thread.name}': {e}"
+                    )
+                    return True  # Assume it exists if we can't fetch the message
                 if norm_location and norm_location in normalize_string(
                     starter_message.content
                 ):
