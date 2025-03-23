@@ -91,7 +91,7 @@ class Scrape(commands.Cog):
             response = requests.get(url)
             response.raise_for_status()  # Raise an exception for bad responses
             data = response.json()
-            logging.info(f"Full API response: {data}")  # Debug: log entire response
+            logging.debug(f"Full API response: {data}")  # Debug: log entire response
 
             # Extract events from the "included" array where type is "tour-events"
             included = data.get("included", [])
@@ -116,7 +116,7 @@ class Scrape(commands.Cog):
                 location = attributes.get("formatted-address", "")
                 entry = (formatted_date, venue, location)
                 new_entries.append(entry)
-                logging.info(
+                logging.debug(
                     f"New entry found: ({normalize_string(formatted_date)}, {normalize_string(venue)}, {normalize_string(location)})"
                 )
         except Exception as e:
@@ -165,7 +165,7 @@ class Scrape(commands.Cog):
                 dt = datetime.strptime(formatted_date, "%d %B %Y")
                 start_dt = datetime(dt.year, dt.month, dt.day, 19, 0, 0, tzinfo=tz)
                 end_dt = datetime(dt.year, dt.month, dt.day, 23, 0, 0, tzinfo=tz)
-            logging.info(f"Parsed event dates from '{formatted_date}' -> start: {start_dt}, end: {end_dt}")
+            logging.debug(f"Parsed event dates from '{formatted_date}' -> start: {start_dt}, end: {end_dt}")
             return start_dt, end_dt
         except Exception as e:
             logging.error(f"Error parsing event dates from '{formatted_date}': {e}")
@@ -194,7 +194,7 @@ class Scrape(commands.Cog):
             thread_title = event_date.title()
             norm_title = normalize_string(thread_title)
             norm_location = normalize_string(location)
-            logging.info(f"Checking thread: original title='{thread_title}', normalized='{norm_title}', location normalized='{norm_location}'")
+            logging.debug(f"Checking thread: original title='{thread_title}', normalized='{norm_title}', location normalized='{norm_location}'")
             exists = await self.thread_exists(gigchats_channel, norm_title, norm_location)
             logging.info(
                 f"Does thread '{thread_title}' with location '{location}' exist in channel '{gigchats_channel.name}'? {exists}"
@@ -242,37 +242,37 @@ class Scrape(commands.Cog):
         """Check if a thread exists with the given title and if its starter message contains the location."""
         norm_title = normalize_string(thread_title)
         norm_location = normalize_string(location)
-        logging.info(f"Checking existence for thread with normalized title '{norm_title}' and location '{norm_location}'")
+        logging.debug(f"Checking existence for thread with normalized title '{norm_title}' and location '{norm_location}'")
         try:
             threads = channel.threads
-            logging.info(f"Channel '{channel.name}' has {len(threads)} active threads.")
+            logging.debug(f"Channel '{channel.name}' has {len(threads)} active threads.")
         except Exception as e:
             logging.error(f"Error accessing channel threads: {e}")
             threads = []
         for thread in threads:
             thread_norm = normalize_string(thread.name)
-            logging.info(f"Comparing with thread: original name='{thread.name}', normalized='{thread_norm}'")
+            logging.debug(f"Comparing with thread: original name='{thread.name}', normalized='{thread_norm}'")
             if thread_norm == norm_title:
                 try:
                     starter_message = await thread.fetch_message(thread.id)
                     message_norm = normalize_string(starter_message.content)
-                    logging.info(f"Starter message for thread '{thread.name}' normalized to: '{message_norm}'")
+                    logging.debug(f"Starter message for thread '{thread.name}' normalized to: '{message_norm}'")
                 except Exception as e:
                     logging.error(f"Error fetching starter message for thread '{thread.name}': {e}")
                     return True  # Assume thread exists if we can't fetch the message
                 if norm_location and norm_location in message_norm:
-                    logging.info(f"Found matching location '{norm_location}' in message for thread '{thread.name}'.")
+                    logging.debug(f"Found matching location '{norm_location}' in message for thread '{thread.name}'.")
                     return True
         # Fallback: check scheduled events for matching thread title
         try:
             scheduled_events = await channel.guild.fetch_scheduled_events()
-            logging.info(f"Fetched {len(scheduled_events)} scheduled events for guild '{channel.guild.name}'.")
+            logging.debug(f"Fetched {len(scheduled_events)} scheduled events for guild '{channel.guild.name}'.")
             for event in scheduled_events:
                 normalized_event_name = normalize_string(event.name)
-                logging.info(f"Comparing with scheduled event: original name='{event.name}', normalized='{normalized_event_name}'")
+                logging.debug(f"Comparing with scheduled event: original name='{event.name}', normalized='{normalized_event_name}'")
                 # Use startswith to allow for extra details in scheduled event names
                 if normalized_event_name.startswith(norm_title):
-                    logging.info(f"Match found in scheduled events: '{normalized_event_name}' starts with '{norm_title}'")
+                    logging.debug(f"Match found in scheduled events: '{normalized_event_name}' starts with '{norm_title}'")
                     return True
         except Exception as e:
             logging.error(f"Error fetching scheduled events: {e}")
@@ -288,12 +288,12 @@ class Scrape(commands.Cog):
             event_image = None
 
         scheduled_events = await guild.fetch_scheduled_events()
-        logging.info(f"Guild '{guild.name}' has {len(scheduled_events)} scheduled events.")
+        logging.debug(f"Guild '{guild.name}' has {len(scheduled_events)} scheduled events.")
         for entry in new_entries:
             event_date, venue, location = entry
             event_name = f"{event_date.title()} - {venue.title() if venue else ''}"
             norm_event_name = normalize_string(event_name)
-            logging.info(f"Normalized scheduled event name: '{norm_event_name}'")
+            logging.debug(f"Normalized scheduled event name: '{norm_event_name}'")
             exists = any(normalize_string(e.name) == norm_event_name for e in scheduled_events)
             logging.info(
                 f"Does scheduled event '{event_name}' exist in guild '{guild.name}'? {exists}"
@@ -354,7 +354,7 @@ class Scrape(commands.Cog):
             description=description,
             color=(discord.Color.green() if (threads_created or events_created) else discord.Color.blurple()),
         )
-        logging.info(f"Sending summary embed with description: {description}")
+        logging.debug(f"Sending summary embed with description: {description}")
         await interaction.followup.send(embed=embed)
 
     async def setup_audit(self, interaction):
