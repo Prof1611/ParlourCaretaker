@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import requests  # For API requests
 import unicodedata
+import string
 
 
 def audit_log(message: str):
@@ -18,17 +19,22 @@ def audit_log(message: str):
 
 
 def normalize_string(s: str) -> str:
-    """Normalize a string by removing diacritics, extra whitespace, and converting to lowercase."""
-    normalized = (
-        unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("utf-8")
-    )
-    return " ".join(normalized.split()).lower()
+    """
+    Normalize a string by removing diacritics, punctuation, extra whitespace,
+    and converting to lowercase.
+    """
+    # Remove diacritics
+    s = unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("utf-8")
+    # Remove punctuation
+    s = s.translate(str.maketrans("", "", string.punctuation))
+    # Collapse extra whitespace and convert to lowercase
+    return " ".join(s.split()).lower()
 
 
 class Scrape(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Load the config file with UTF-8 encoding to handle special characters like emoji.
+        # Load the config file with UTF-8 encoding.
         with open("config.yaml", "r", encoding="utf-8") as config_file:
             self.config = yaml.safe_load(config_file)
 
@@ -86,9 +92,9 @@ class Scrape(commands.Cog):
             # API endpoint that returns event data (powered by Seated)
             url = "https://cdn.seated.com/api/tour/deb5e9f0-4af5-413c-a24b-1b22f11513b2?include=tour-events"
             response = requests.get(url)
-            response.raise_for_status()  # Raise an exception for bad responses
+            response.raise_for_status()
             data = response.json()
-            logging.info(f"Full API response: {data}")  # Debug: log the entire response
+            logging.info(f"Full API response: {data}")  # Debug: log entire response
 
             # Extract events from the "included" array where type is "tour-events"
             included = data.get("included", [])
