@@ -23,11 +23,8 @@ def normalize_string(s: str) -> str:
     Normalize a string by removing diacritics, punctuation, extra whitespace,
     and converting to lowercase.
     """
-    # Remove diacritics
     s = unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("utf-8")
-    # Remove punctuation
     s = s.translate(str.maketrans("", "", string.punctuation))
-    # Collapse extra whitespace and convert to lowercase
     return " ".join(s.split()).lower()
 
 
@@ -94,7 +91,7 @@ class Scrape(commands.Cog):
             response = requests.get(url)
             response.raise_for_status()
             data = response.json()
-            logging.info(f"Full API response: {data}")  # Debug: log entire response
+            logging.debug(f"Full API response: {data}")  # Debug: log entire response
 
             # Extract events from the "included" array where type is "tour-events"
             included = data.get("included", [])
@@ -337,19 +334,26 @@ class Scrape(commands.Cog):
     async def send_combined_summary(
         self, interaction, threads_created: int, events_created: int
     ):
-        description = (
-            f"**Forum Threads:** {threads_created} new thread{'s' if threads_created != 1 else ''} created.\n"
-            f"**Scheduled Events:** {events_created} new scheduled event{'s' if events_created != 1 else ''} created."
-        )
-        embed = discord.Embed(
-            title="Scrape Completed",
-            description=description,
-            color=(
-                discord.Color.green()
-                if (threads_created or events_created)
-                else discord.Color.blurple()
-            ),
-        )
+        if threads_created == 0 and events_created == 0:
+            embed = discord.Embed(
+                title="Scrape Completed",
+                description="All up to date!",
+                color=discord.Color.green(),
+            )
+        else:
+            description = (
+                f"**Forum Threads:** {threads_created} new thread{'s' if threads_created != 1 else ''} created.\n"
+                f"**Scheduled Events:** {events_created} new scheduled event{'s' if events_created != 1 else ''} created."
+            )
+            embed = discord.Embed(
+                title="Scrape Completed",
+                description=description,
+                color=(
+                    discord.Color.green()
+                    if (threads_created or events_created)
+                    else discord.Color.blurple()
+                ),
+            )
         await interaction.followup.send(embed=embed)
 
     async def setup_audit(self, interaction):
