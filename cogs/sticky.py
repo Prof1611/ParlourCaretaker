@@ -17,6 +17,19 @@ def audit_log(message: str):
         f.write(f"[{timestamp}] {message}\n")
 
 
+# --- Permission Check ---
+async def bot_has_channel_perms(interaction: discord.Interaction) -> bool:
+    channel = interaction.channel
+    if channel is None:
+        raise app_commands.CheckFailure("Channel not found.")
+    perms = channel.permissions_for(interaction.guild.me)
+    if not perms.send_messages:
+        raise app_commands.CheckFailure(
+            "I do not have permission to send messages in this channel."
+        )
+    return True
+
+
 # --- Dropdown (Select) and View to choose sticky format ---
 class StickyFormatSelect(discord.ui.Select):
     def __init__(self):
@@ -296,6 +309,7 @@ class Sticky(commands.Cog):
             new_content = f"{content}{STICKY_MARKER}"
             return await channel.send(new_content)
 
+    @app_commands.check(bot_has_channel_perms)
     @app_commands.command(
         name="setsticky",
         description="Set a sticky message in the channel.",
@@ -309,6 +323,7 @@ class Sticky(commands.Cog):
             f"{interaction.user.name} (ID: {interaction.user.id}) invoked /setsticky in channel #{interaction.channel.name} (ID: {interaction.channel.id})."
         )
 
+    @app_commands.check(bot_has_channel_perms)
     @app_commands.command(
         name="removesticky",
         description="Remove the sticky message in the channel.",
