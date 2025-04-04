@@ -362,48 +362,54 @@ class Sticky(commands.Cog):
             self.debounce_tasks.pop(channel.id, None)
 
     async def handle_error(self, e, channel, interaction):
+        error_embed = None
         if e.status == 403:
             logging.error(f"No access to #{channel.name}. Error: {e}")
-            embed = discord.Embed(
+            error_embed = discord.Embed(
                 title="Error",
-                description=f"I don't have access to #{channel.name}!",
+                description=f"I don't have access to #{channel.name}! Please check my permissions.",
                 color=discord.Color.red(),
             )
-            await interaction.followup.send(embed=embed)
         elif e.status == 404:
             logging.error(f"Channel not found. Error: {e}")
-            embed = discord.Embed(
+            error_embed = discord.Embed(
                 title="Error",
                 description="Channel not found!",
                 color=discord.Color.red(),
             )
-            await interaction.followup.send(embed=embed)
         elif e.status == 429:
             logging.error(f"RATE LIMIT. Error: {e}")
-            embed = discord.Embed(
+            error_embed = discord.Embed(
                 title="Error",
                 description="Too many requests! Please try later.",
                 color=discord.Color.red(),
             )
-            await interaction.followup.send(embed=embed)
         elif e.status in {500, 502, 503, 504}:
             logging.error(f"Discord API Error. Error: {e}")
-            embed = discord.Embed(
+            error_embed = discord.Embed(
                 title="Error",
                 description=f"Failed to set sticky message in #{channel.name}. Please try later.",
                 color=discord.Color.red(),
             )
-            await interaction.followup.send(embed=embed)
         else:
             logging.error(
                 f"Error when attempting to set sticky message in #{channel.name}. Error: {e}"
             )
-            embed = discord.Embed(
+            error_embed = discord.Embed(
                 title="Error",
                 description=f"Failed to set sticky message in #{channel.name}.",
                 color=discord.Color.red(),
             )
-            await interaction.followup.send(embed=embed)
+
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(embed=error_embed, ephemeral=True)
+            else:
+                await interaction.response.send_message(
+                    embed=error_embed, ephemeral=True
+                )
+        except Exception as followup_error:
+            logging.error(f"Error sending follow-up error message: {followup_error}")
 
 
 async def setup(bot: commands.Bot):
