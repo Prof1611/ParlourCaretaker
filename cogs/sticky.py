@@ -78,6 +78,21 @@ class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
         content = self.sticky_message.value
         channel = interaction.channel
 
+        # Early check: ensure the bot has permission to send messages (and embed links, if required).
+        perms = channel.permissions_for(channel.guild.me)
+        if not perms.send_messages or (
+            self.selected_format == "embed" and not perms.embed_links
+        ):
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="Error",
+                    description=f"I don't have the necessary permissions to send sticky messages in #{channel.name}. Please check my permissions.",
+                    color=discord.Color.red(),
+                ),
+                ephemeral=True,
+            )
+            return
+
         # If an old sticky exists, attempt to delete it.
         if channel.id in self.sticky_cog.stickies:
             previous_sticky = self.sticky_cog.stickies[channel.id]
