@@ -9,13 +9,11 @@ import datetime
 # Define an invisible marker for sticky messages using zero-width characters.
 STICKY_MARKER = "\u200b\u200c\u200d\u2060"
 
-
 def audit_log(message: str):
     """Append a timestamped message to the audit log file."""
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open("audit.log", "a", encoding="utf-8") as f:
         f.write(f"[{timestamp}] {message}\n")
-
 
 # --- Permission Check ---
 async def bot_has_channel_perms(interaction: discord.Interaction) -> bool:
@@ -23,12 +21,11 @@ async def bot_has_channel_perms(interaction: discord.Interaction) -> bool:
     if channel is None:
         raise app_commands.CheckFailure("Channel not found.")
     perms = channel.permissions_for(interaction.guild.me)
+    if not perms.view_channel:
+        raise app_commands.CheckFailure("I do not have permission to view this channel.")
     if not perms.send_messages:
-        raise app_commands.CheckFailure(
-            "I do not have permission to send messages in this channel."
-        )
+        raise app_commands.CheckFailure("I do not have permission to send messages in this channel.")
     return True
-
 
 # --- Dropdown (Select) and View to choose sticky format ---
 class StickyFormatSelect(discord.ui.Select):
@@ -63,14 +60,12 @@ class StickyFormatSelect(discord.ui.Select):
             f"{interaction.user.name} (ID: {interaction.user.id}) selected sticky format '{self.values[0]}' for channel #{interaction.channel.name} (ID: {interaction.channel.id})."
         )
 
-
 class StickyFormatView(discord.ui.View):
     def __init__(self, sticky_cog: "Sticky"):
         super().__init__()
         self.sticky_cog = sticky_cog
         self.selected_format = "normal"
         self.add_item(StickyFormatSelect())
-
 
 # --- Modal for multi-line sticky message input ---
 class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
@@ -91,7 +86,7 @@ class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
         content = self.sticky_message.value
         channel = interaction.channel
 
-        # Early check: ensure the bot has permission to send messages (and embed links, if required).
+        # Early check: ensure the bot has permission to send messages (and embed links if needed).
         perms = channel.permissions_for(channel.guild.me)
         if not perms.send_messages or (
             self.selected_format == "embed" and not perms.embed_links
@@ -144,7 +139,6 @@ class StickyModal(discord.ui.Modal, title="Set Sticky Message"):
             )
         except discord.HTTPException as e:
             await self.sticky_cog.handle_error(e, channel, interaction)
-
 
 # --- Sticky Cog ---
 class Sticky(commands.Cog):
@@ -440,7 +434,6 @@ class Sticky(commands.Cog):
                 )
         except Exception as followup_error:
             logging.error(f"Error sending follow-up error message: {followup_error}")
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Sticky(bot))
