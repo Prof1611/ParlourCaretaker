@@ -304,7 +304,7 @@ class Sticky(commands.Cog):
             await interaction.response.send_message(
                 embed=discord.Embed(
                     title="Error",
-                    description="I do not have sufficient permissions (view, send, manage messages) in this channel.",
+                    description="I don't have permission to view, send or manage messages in this channel!",
                     color=discord.Color.red(),
                 ),
                 ephemeral=True,
@@ -335,7 +335,7 @@ class Sticky(commands.Cog):
             await interaction.response.send_message(
                 embed=discord.Embed(
                     title="Error",
-                    description="I do not have sufficient permissions (view, send, manage messages) in this channel.",
+                    description="I don't have permission to view, send or manage messages in this channel!",
                     color=discord.Color.red(),
                 ),
                 ephemeral=True,
