@@ -297,8 +297,7 @@ class Sticky(commands.Cog):
             return await channel.send(new_content)
 
     @app_commands.command(
-        name="setsticky",
-        description="Set a sticky message in the channel.",
+        name="setsticky", description="Set a sticky message in the channel."
     )
     async def set_sticky(self, interaction: discord.Interaction):
         channel = interaction.channel
@@ -308,11 +307,11 @@ class Sticky(commands.Cog):
             )
             return
         perms = channel.permissions_for(interaction.guild.me)
-        if not (perms.view_channel and perms.send_messages):
+        if not (perms.view_channel and perms.send_messages and perms.manage_messages):
             await interaction.response.send_message(
                 embed=discord.Embed(
                     title="Error",
-                    description="I do not have permission to view or send messages in this channel.",
+                    description="I do not have sufficient permissions (view, send, manage messages) in this channel.",
                     color=discord.Color.red(),
                 ),
                 ephemeral=True,
@@ -328,8 +327,7 @@ class Sticky(commands.Cog):
         )
 
     @app_commands.command(
-        name="removesticky",
-        description="Remove the sticky message in the channel.",
+        name="removesticky", description="Remove the sticky message in the channel."
     )
     async def remove_sticky(self, interaction: discord.Interaction):
         channel = interaction.channel
@@ -339,11 +337,11 @@ class Sticky(commands.Cog):
             )
             return
         perms = channel.permissions_for(interaction.guild.me)
-        if not (perms.view_channel and perms.send_messages):
+        if not (perms.view_channel and perms.send_messages and perms.manage_messages):
             await interaction.response.send_message(
                 embed=discord.Embed(
                     title="Error",
-                    description="I do not have permission to view or send messages in this channel.",
+                    description="I do not have sufficient permissions (view, send, manage messages) in this channel.",
                     color=discord.Color.red(),
                 ),
                 ephemeral=True,
