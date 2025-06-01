@@ -246,7 +246,7 @@ class Scrape(commands.Cog):
                     audit_log(
                         f"{interaction.user.name} (ID: {interaction.user.id}) created thread '{thread_title}' in channel #{gigchats_channel.name} (ID: {gigchats_channel.id}) in guild '{guild.name}' (ID: {guild.id})."
                     )
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(2)
                 except discord.Forbidden:
                     logging.error(
                         f"Permission denied when trying to create thread '{thread_title}'"
@@ -394,7 +394,7 @@ class Scrape(commands.Cog):
                     audit_log(
                         f"{interaction.user.name} (ID: {interaction.user.id}) created scheduled event '{event_name}' in guild '{guild.name}' (ID: {guild.id})."
                     )
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(2)
                 except discord.Forbidden:
                     logging.error(
                         f"Permission denied when trying to create scheduled event '{event_name}'"
