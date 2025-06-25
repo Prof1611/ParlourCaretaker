@@ -118,7 +118,9 @@ Persistent data for features like the roulette game and sticky messages are stor
 
 ## Licence
 
-This project is licensed under the GPL-3.0 Licence – see the [LICENCE](LICENCE) file for details.
+This project is **not open source**.  
+All rights reserved © 2025 Jay Jones.  
+You may not use, distribute, or modify any part of this codebase without explicit written permission.
 
 ## Support
 
@@ -129,4 +131,3 @@ For any bugs or feature requests, feel free to open an issue in the [Issues](htt
 ## Maintained by:
 
 - **GitHub:** [Prof1611](https://github.com/Prof1611) | **Discord:** Tygafire  
-- **GitHub:** [MichaelEavis](https://github.com/MichaelEavis) | **Discord:** Harry0278
