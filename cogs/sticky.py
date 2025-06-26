@@ -27,7 +27,7 @@ class ColourSelect(discord.ui.Select):
     def __init__(self, parent_view: "StickyColourPickView"):
         options = [
             discord.SelectOption(
-                label="Default", value="default", description="Black (#000000)"
+                label="Default", value="default", description="Blurple (#5865F2)"
             ),
             discord.SelectOption(
                 label="Custom Hex",
@@ -35,7 +35,31 @@ class ColourSelect(discord.ui.Select):
                 description="Enter your own hex code…",
             ),
             discord.SelectOption(
-                label="Random", value="random", description="Pick a random hue"
+                label="Random", value="random", description="Bot picks a random colour!"
+            ),
+            discord.SelectOption(
+                label="White", value="white", description="Pure White (#FFFFFF)"
+            ),
+            discord.SelectOption(
+                label="Red", value="red", description="Carmine Pink (#E74C3C)"
+            ),
+            discord.SelectOption(
+                label="Dark Red", value="dark_red", description="Red Birch (#992D22)"
+            ),
+            discord.SelectOption(
+                label="Orange", value="orange", description="Dark Cheddar (#E67E22)"
+            ),
+            discord.SelectOption(
+                label="Yellow", value="yellow", description="Corn (#FEE75C)"
+            ),
+            discord.SelectOption(
+                label="Gold", value="gold", description="Tanned Leather (#F1C40F)"
+            ),
+            discord.SelectOption(
+                label="Green", value="green", description="UFO Green (#2ECC71)"
+            ),
+            discord.SelectOption(
+                label="Dark Green", value="dark_green", description="Pine (#145A32)"
             ),
             discord.SelectOption(
                 label="Teal", value="teal", description="Aloha (#1ABC9C)"
@@ -44,7 +68,10 @@ class ColourSelect(discord.ui.Select):
                 label="Dark Teal", value="dark_teal", description="Blue Green (#11806A)"
             ),
             discord.SelectOption(
-                label="Green", value="green", description="UFO Green (#2ECC71)"
+                label="Blue", value="blue", description="Dayflower (#3498DB)"
+            ),
+            discord.SelectOption(
+                label="Dark Blue", value="dark_blue", description="Deep Water (#206694)"
             ),
             discord.SelectOption(
                 label="Blurple", value="blurple", description="Blue Genie (#5865F2)"
@@ -55,10 +82,10 @@ class ColourSelect(discord.ui.Select):
                 description="Zeus' Temple (#7289DA)",
             ),
             discord.SelectOption(
-                label="Blue", value="blue", description="Dayflower (#3498DB)"
+                label="Fuchsia", value="fuchsia", description="Hot Pink (#EB459E)"
             ),
             discord.SelectOption(
-                label="Dark Blue", value="dark_blue", description="Deep Water (#206694)"
+                label="Magenta", value="magenta", description="Vivid Magenta (#E84393)"
             ),
             discord.SelectOption(
                 label="Purple", value="purple", description="Deep Lilac (#9B59B6)"
@@ -67,26 +94,6 @@ class ColourSelect(discord.ui.Select):
                 label="Dark Purple",
                 value="dark_purple",
                 description="Maximum Purple (#71368A)",
-            ),
-            discord.SelectOption(
-                label="Gold", value="gold", description="Tanned Leather (#F1C40F)"
-            ),
-            discord.SelectOption(
-                label="Dark Gold", value="dark_gold", description="Tree Sap (#C27C0E)"
-            ),
-            discord.SelectOption(
-                label="Orange", value="orange", description="Dark Cheddar (#E67E22)"
-            ),
-            discord.SelectOption(
-                label="Dark Orange",
-                value="dark_orange",
-                description="Pepperoni (#A84300)",
-            ),
-            discord.SelectOption(
-                label="Red", value="red", description="Carmine Pink (#E74C3C)"
-            ),
-            discord.SelectOption(
-                label="Dark Red", value="dark_red", description="Red Birch (#992D22)"
             ),
             discord.SelectOption(
                 label="Greyple", value="greyple", description="Irogon Blue (#99AAB5)"
@@ -104,12 +111,10 @@ class ColourSelect(discord.ui.Select):
             discord.SelectOption(
                 label="Dark Theme",
                 value="dark_theme",
-                description="Antarctic Deep (transparent)",
-            ),
-            discord.SelectOption(
-                label="Yellow", value="yellow", description="Corn (#FEE75C)"
+                description="Discord UI (#36393F)",
             ),
         ]
+
         super().__init__(
             placeholder="Choose an embed colour…",
             min_values=1,
@@ -130,10 +135,14 @@ class ColourSelect(discord.ui.Select):
             )
         else:
             try:
-                factory = getattr(discord.Color, choice)
-                self.parent_view.chosen_colour = factory()
+                # Set blurple as default (Discord's branding) instead of black
+                if choice == "default":
+                    self.parent_view.chosen_colour = discord.Color.blurple()
+                else:
+                    factory = getattr(discord.Color, choice)
+                    self.parent_view.chosen_colour = factory()
             except Exception:
-                self.parent_view.chosen_colour = discord.Color.default()
+                self.parent_view.chosen_colour = discord.Color.blurple()
             await interaction.response.send_modal(
                 StickyModal(
                     self.parent_view.bot,
