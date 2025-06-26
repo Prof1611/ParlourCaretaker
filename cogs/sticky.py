@@ -441,13 +441,21 @@ class Sticky(commands.Cog):
                     )
 
             fmt = sticky.get("format", "normal")
-            new_sticky = await self._send_sticky(channel, sticky["content"], fmt)
+            colour_value = sticky.get(
+                "color", discord.Color.blurple().value
+            )  # fallback to blurple
+            new_sticky = await self._send_sticky(
+                channel, sticky["content"], fmt, colour_value
+            )
             self.stickies[channel.id] = {
                 "content": sticky["content"],
                 "message_id": new_sticky.id,
                 "format": fmt,
+                "color": colour_value,
             }
-            self.update_sticky_in_db(channel.id, sticky["content"], new_sticky.id, fmt)
+            self.update_sticky_in_db(
+                channel.id, sticky["content"], new_sticky.id, fmt, colour_value
+            )
 
     @commands.Cog.listener()
     async def on_ready(self):
