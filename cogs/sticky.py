@@ -397,36 +397,39 @@ class Sticky(commands.Cog):
 
         lock = self.locks.setdefault(channel.id, asyncio.Lock())
         async with lock:
+            # Delete ALL previous sticky messages by the bot (except the one about to post)
             history = [msg async for msg in channel.history(limit=50)]
-            if history and not force_update:
-                latest = history[0]
-                is_latest_sticky = False
-                if latest.author == self.bot.user:
-                    if (latest.content and latest.content.endswith(STICKY_MARKER)) or (
-                        latest.embeds
-                        and latest.embeds[0].description
-                        and latest.embeds[0].description.endswith(STICKY_MARKER)
-                    ):
-                        is_latest_sticky = True
-                if is_latest_sticky:
-                    for msg in history[1:]:
-                        if msg.author == self.bot.user:
-                            if (
-                                msg.content and msg.content.endswith(STICKY_MARKER)
-                            ) or (
-                                msg.embeds
-                                and msg.embeds[0].description
-                                and msg.embeds[0].description.endswith(STICKY_MARKER)
-                            ):
-                                try:
-                                    await msg.delete()
-                                except Exception as e:
-                                    logging.error(
-                                        f"Error deleting duplicate sticky in #{channel.name}: {e}"
-                                    )
-                    return
+            newest_is_sticky = False
+            for msg in history:
+                if msg.author == self.bot.user and (
+                    (msg.content and msg.content.endswith(STICKY_MARKER))
+                    or (
+                        msg.embeds
+                        and msg.embeds[0].description
+                        and msg.embeds[0].description.endswith(STICKY_MARKER)
+                    )
+                ):
+                    # If this is the message we're about to post, don't delete it
+                    if msg.id == sticky.get("message_id"):
+                        newest_is_sticky = msg == history[0]
+                        continue
+                    try:
+                        await msg.delete()
+                    except Exception as e:
+                        logging.error(
+                            f"Error deleting old sticky in #{channel.name}: {e}"
+                        )
 
-            try:
+            # If the newest message is already the sticky, and not forced, do nothing
+            if (
+                not force_update
+                and history
+                and history[0].id == sticky.get("message_id")
+            ):
+                return
+
+            # Delete tracked sticky if still present but not in recent history
+            if sticky.get("message_id"):
                 try:
                     old_message = await channel.fetch_message(sticky["message_id"])
                     await old_message.delete()
@@ -434,26 +437,17 @@ class Sticky(commands.Cog):
                     pass
                 except Exception as e:
                     logging.error(
-                        f"Error deleting old sticky in channel #{channel.name}: {e}"
+                        f"Error deleting tracked sticky in channel #{channel.name}: {e}"
                     )
 
-                fmt = sticky.get("format", "normal")
-                colour = sticky.get("color", discord.Color.blurple().value)
-                new_sticky = await self._send_sticky(
-                    channel, sticky["content"], fmt, colour
-                )
-
-                self.stickies[channel.id] = {
-                    "content": sticky["content"],
-                    "message_id": new_sticky.id,
-                    "format": fmt,
-                    "color": colour,
-                }
-                self.update_sticky_in_db(
-                    channel.id, sticky["content"], new_sticky.id, fmt, colour
-                )
-            except Exception as e:
-                logging.error(f"Error updating sticky in channel #{channel.name}: {e}")
+            fmt = sticky.get("format", "normal")
+            new_sticky = await self._send_sticky(channel, sticky["content"], fmt)
+            self.stickies[channel.id] = {
+                "content": sticky["content"],
+                "message_id": new_sticky.id,
+                "format": fmt,
+            }
+            self.update_sticky_in_db(channel.id, sticky["content"], new_sticky.id, fmt)
 
     @commands.Cog.listener()
     async def on_ready(self):
