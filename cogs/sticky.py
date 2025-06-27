@@ -518,8 +518,12 @@ class Sticky(commands.Cog):
                 )
 
     async def _debounced_update(self, channel: discord.abc.Messageable, sticky: dict):
+        if channel.id not in self.stickies:
+            return
         try:
             await asyncio.sleep(self.debounce_interval)
+            if channel.id not in self.stickies:
+                return
             await self.update_sticky_for_channel(channel, sticky, force_update=False)
         finally:
             self.debounce_tasks.pop(channel.id, None)
@@ -569,6 +573,10 @@ class Sticky(commands.Cog):
             pass
         self.delete_sticky_from_db(channel.id)
         del self.stickies[channel.id]
+        # --- CANCEL ANY DEBOUNCE TASK ---
+        task = self.debounce_tasks.pop(channel.id, None)
+        if task:
+            task.cancel()
 
         ok = make_embed(
             "Sticky Removed",
