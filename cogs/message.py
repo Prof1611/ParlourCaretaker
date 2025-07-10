@@ -1,6 +1,6 @@
 import discord
 import logging
-from discord import app_commands
+from discord import app_commands, AllowedMentions
 from discord.ext import commands
 import asyncio
 import datetime
@@ -99,6 +99,9 @@ class MessageModal(discord.ui.Modal, title="Send a Custom Message"):
             self.add_item(self.message_input)
 
     async def on_submit(self, interaction: discord.Interaction):
+        # Allow user and role mentions when sending
+        allowed = AllowedMentions(users=True, roles=True)
+
         message_value = self.message_input.value
         embed_title = (
             self.embed_title_input.value if self.selected_format == "embed" else None
@@ -136,12 +139,18 @@ class MessageModal(discord.ui.Modal, title="Send a Custom Message"):
                     description=message_value,
                     color=discord.Color.blurple(),
                 )
-                await self.target_channel.send(embed=embed)
+                await self.target_channel.send(
+                    embed=embed,
+                    allowed_mentions=allowed
+                )
                 audit_log(
                     f"{interaction.user.name} (ID: {interaction.user.id}) sent custom embed message in channel #{self.target_channel.name} (ID: {self.target_channel.id}) with title '{embed_title}'."
                 )
             else:
-                await self.target_channel.send(message_value)
+                await self.target_channel.send(
+                    message_value,
+                    allowed_mentions=allowed
+                )
                 audit_log(
                     f"{interaction.user.name} (ID: {interaction.user.id}) sent custom normal message in channel #{self.target_channel.name} (ID: {self.target_channel.id})."
                 )
