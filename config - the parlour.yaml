@@ -40,6 +40,7 @@ games_channel_id: 1159782202985426964         # Channel for sending games night 
 gigchats_id: 1195097407604666399               # Channel for gig chats forum.
 welcome_channel_id: 1151864993571160135        # Channel where welcome messages are posted.
 new_member_channel_id: 1174309687324315679        # Channel where new members are directed.
+introductions_channel_id: 0                       # Channel for introduction messages.
 
 # --------------------------
 # Role Settings
