@@ -70,10 +70,12 @@ The bot uses a YAML configuration file (`config.yaml`) to control various settin
     The ID of the channel used for forwarding direct messages.
   - `games_channel_id`:  
     The ID of the channel for games night announcements.
-  - `gigchats_id`:  
+  - `gigchats_id`:
     The ID of the channel used for gig chats forum updates.
-  - `welcome_channel_id`:  
+  - `welcome_channel_id`:
     The ID of the channel where welcome messages are posted.
+  - `introductions_channel_id`:
+    The ID of the channel where the bot reacts to introduction messages.
 
 - **Role Settings:**
   - `newjoin_role_id`:  
