@@ -355,10 +355,16 @@ class Sticky(commands.Cog):
             )
         self.db.commit()
         self.load_stickies()
-        self.initialised = False
         self.locks = {}
         self.debounce_tasks = {}
         self.debounce_interval = 1.0
+
+    def cog_unload(self):
+        """Close the database connection when the cog is unloaded."""
+        try:
+            self.db.close()
+        except Exception as e:
+            logging.error(f"Error closing Sticky cog database: {e}")
 
     def load_stickies(self):
         self.stickies = {}
@@ -408,7 +414,6 @@ class Sticky(commands.Cog):
         async with lock:
             # Delete ALL previous sticky messages by the bot (except the one about to post)
             history = [msg async for msg in channel.history(limit=50)]
-            newest_is_sticky = False
             for msg in history:
                 if msg.author == self.bot.user and (
                     (msg.content and msg.content.endswith(STICKY_MARKER))
@@ -420,7 +425,6 @@ class Sticky(commands.Cog):
                 ):
                     # If this is the message we're about to post, don't delete it
                     if msg.id == sticky.get("message_id"):
-                        newest_is_sticky = msg == history[0]
                         continue
                     try:
                         await msg.delete()
@@ -476,7 +480,6 @@ class Sticky(commands.Cog):
                 await self.update_sticky_for_channel(
                     channel, sticky, force_update=False
                 )
-        self.initialised = True
 
     @commands.Cog.listener()
     async def on_resumed(self):
@@ -488,7 +491,6 @@ class Sticky(commands.Cog):
                 await self.update_sticky_for_channel(
                     channel, sticky, force_update=False
                 )
-        self.initialised = True
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
