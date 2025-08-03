@@ -175,6 +175,9 @@ class SecondBestTracker(commands.Cog):
         asyncio.create_task(self._background_rescan(interaction.guild, interaction.user))
 
     async def _background_rescan(self, guild: discord.Guild, user: discord.User):
+        from datetime import datetime
+        start_time = datetime.now()
+
         with sqlite3.connect(DATABASE_PATH) as conn:
             c = conn.cursor()
             c.execute("DELETE FROM second_best_user_count")
@@ -184,12 +187,22 @@ class SecondBestTracker(commands.Cog):
         audit_log("Cleared second_best tables before rescan.")
 
         total_count = 0
-        for channel in guild.text_channels:
-            if not channel.permissions_for(guild.me).read_message_history:
-                continue
+        total_messages = 0
+        text_channels = [ch for ch in guild.text_channels if ch.permissions_for(guild.me).read_message_history]
+        total_channels = len(text_channels)
+
+        for i, channel in enumerate(text_channels, start=1):
+            logging.info(f"[{i}/{total_channels}] Scanning #{channel.name} (ID: {channel.id})...")
+            audit_log(f"[{i}/{total_channels}] Scanning #{channel.name} for 'second best'...")
+
+            count = 0
+            message_count = 0
+
             try:
-                count = 0
                 async for msg in channel.history(limit=None, oldest_first=True):
+                    message_count += 1
+                    total_messages += 1
+
                     if msg.author.bot:
                         continue
                     if contains_second_best(msg.content):
@@ -197,16 +210,29 @@ class SecondBestTracker(commands.Cog):
                         increment_sb_stat("second_best_channel_count", channel.id)
                         count += 1
                         total_count += 1
-                audit_log(f"Scanned #{channel.name}: {count} matches.")
+
+                percent = (i / total_channels) * 100
+                logging.info(f"Done with #{channel.name}: {count} matches in {message_count} messages. ({percent:.1f}% complete)")
+                audit_log(f"#{channel.name}: {count} matches out of {message_count} messages. Progress: {percent:.1f}%")
+
             except (discord.Forbidden, discord.HTTPException) as e:
+                logging.warning(f"Error scanning #{channel.name}: {e}")
                 audit_log(f"Error scanning #{channel.name}: {e}")
                 continue
 
-        audit_log(f"Rescan complete. Total matches: {total_count}.")
+        elapsed = (datetime.now() - start_time).total_seconds()
+        summary = (
+            f"Rescan complete. {total_count} matches found across {total_messages} messages "
+            f"in {elapsed:.1f} seconds."
+        )
+        logging.info(summary)
+        audit_log(summary)
+
         try:
             await user.send(
                 f"✅ Second Best rescan complete for **{guild.name}**.\n"
-                f"Total matches found: **{total_count}**."
+                f"**{total_count}** matches found across **{total_messages}** messages "
+                f"in `{elapsed:.1f}` seconds."
             )
         except discord.Forbidden:
             audit_log(f"Could not DM user {user.id} after rescan.")
