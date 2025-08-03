@@ -57,7 +57,7 @@ class Welcome(commands.Cog):
                 f"Welcome {member.mention}! Retire with us to the parlour for after-dinner games in celebration of our hosts, The Last Dinner Party.\n\n"
                 f"Make sure to check out <#{self.new_member_channel_id}> for our server info 🏹"
             ),
-            color=discord.Color.dark_red(),
+            color=0xf5354c,
         )
         embed.set_image(url="attachment://welcome-image.jpg")
 
