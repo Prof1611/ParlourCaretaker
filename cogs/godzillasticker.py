@@ -200,7 +200,7 @@ def normalise_text(text: str) -> str:
     for srcs, tgt in UNICODE_REPLACE.items():
         for c in srcs:
             table[ord(c)] = tgt
-    return text.translate(table).lower()
+    return text.translate(table).lower().replace(" ", "")
 
 
 def contains_godzilla(text: str) -> bool:
@@ -210,7 +210,7 @@ def contains_godzilla(text: str) -> bool:
 class GodzillaSticker(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.cooldowns = {}  # user_id: last_trigger_time
+        self.cooldowns = {}
         ensure_db_tables()
 
     @commands.Cog.listener()
