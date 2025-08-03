@@ -4,11 +4,11 @@ from discord.ext import commands
 from discord import app_commands
 import datetime
 import sqlite3
-import time
 import unicodedata
+import time
 
 STICKER_ID = 1364364888171872256
-COOLDOWN_SECONDS = 30
+COOLDOWN_SECONDS = 15
 DATABASE_PATH = "database.db"
 
 
@@ -70,7 +70,7 @@ def get_top_channels(limit=5):
         return c.fetchall()
 
 
-# Mapping for common accented/leet Unicode letters to ASCII (NOT for maketrans)
+# Mapping for common accented/leet Unicode letters to ASCII
 UNICODE_REPLACE = {
     "àáâãäåāąă": "a",
     "çćčĉċ": "c",
@@ -112,7 +112,6 @@ UNICODE_REPLACE = {
     "Ü": "U",
     "Ä": "A",
     "ẞ": "SS",
-    # Fullwidth
     "ａ": "a",
     "ｂ": "b",
     "ｃ": "c",
@@ -165,7 +164,6 @@ UNICODE_REPLACE = {
     "Ｘ": "x",
     "Ｙ": "y",
     "Ｚ": "z",
-    # Superscript/subscript/fancy Unicode
     "ɢ": "g",
     "ᴏ": "o",
     "ᴅ": "d",
@@ -196,28 +194,23 @@ UNICODE_REPLACE = {
 
 
 def normalise_text(text: str) -> str:
-    # Step 1: Unicode NFKD decomposition, then strip combining accents
     text = unicodedata.normalize("NFKD", text)
     text = "".join(c for c in text if not unicodedata.combining(c))
-    # Step 2: Build translation table for all variant chars
     table = {}
     for srcs, tgt in UNICODE_REPLACE.items():
         for c in srcs:
             table[ord(c)] = tgt
-    text = text.translate(table)
-    # Step 3: Lowercase for case-insensitive matching
-    return text.lower()
+    return text.translate(table).lower()
 
 
 def contains_godzilla(text: str) -> bool:
-    norm = normalise_text(text)
-    return "godzilla" in norm
+    return "godzilla" in normalise_text(text)
 
 
 class GodzillaSticker(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.cooldowns = {}  # channel_id: last_sent_time
+        self.cooldowns = {}  # user_id: last_trigger_time
         ensure_db_tables()
 
     @commands.Cog.listener()
@@ -225,16 +218,15 @@ class GodzillaSticker(commands.Cog):
         if message.author.bot or message.guild is None:
             return
 
-        # Trigger if "godzilla" appears anywhere, in any case/stylisation
         if not contains_godzilla(message.content):
             return
 
         now = time.time()
-        last = self.cooldowns.get(message.channel.id, 0)
+        last = self.cooldowns.get(message.author.id, 0)
         if now - last < COOLDOWN_SECONDS:
             return
 
-        self.cooldowns[message.channel.id] = now
+        self.cooldowns[message.author.id] = now
 
         try:
             await message.channel.send(
@@ -245,29 +237,17 @@ class GodzillaSticker(commands.Cog):
             increment_stat("godzilla_user_count", message.author.id)
             increment_stat("godzilla_channel_count", message.channel.id)
             audit_log(
-                f"Sent Godzilla sticker (reply mode) in #{message.channel.name} (ID: {message.channel.id}) "
-                f"after message by {message.author} (ID: {message.author.id})."
+                f"Sent Godzilla sticker in #{message.channel.name} for user {message.author}."
             )
             logging.info(
-                f"Godzilla sticker sent in #{message.channel.name} (Guild: {message.guild.name})."
+                f"Godzilla sticker sent for {message.author} in #{message.channel.name}."
             )
         except discord.Forbidden as e:
-            error_msg = f"Failed to send Godzilla sticker: Missing permissions in #{message.channel.name} (ID: {message.channel.id})."
-            logging.error(error_msg + f" Error: {e}")
-            audit_log(error_msg)
+            logging.error(f"Missing permissions to send sticker: {e}")
+            audit_log(f"Failed to send sticker in #{message.channel.name}: {e}")
         except discord.HTTPException as e:
-            if e.status == 429:
-                error_msg = f"Failed to send Godzilla sticker: Rate limited in #{message.channel.name} (ID: {message.channel.id})."
-                logging.error(error_msg + f" Error: {e}")
-                audit_log(error_msg)
-            else:
-                error_msg = f"HTTPException sending Godzilla sticker in #{message.channel.name} (ID: {message.channel.id}): {e}"
-                logging.error(error_msg)
-                audit_log(error_msg)
-        except Exception as e:
-            error_msg = f"Unexpected error sending Godzilla sticker in #{message.channel.name} (ID: {message.channel.id}): {e}"
-            logging.error(error_msg)
-            audit_log(error_msg)
+            logging.error(f"HTTP error sending sticker: {e}")
+            audit_log(f"HTTPException in #{message.channel.name}: {e}")
 
     @app_commands.command(
         name="godzilla_stats",
@@ -291,7 +271,7 @@ class GodzillaSticker(commands.Cog):
 
         embed = discord.Embed(
             title="Godzilla Sticker Leaderboard",
-            color=discord.Color.blurple(),
+            colour=discord.Colour.blurple(),
             timestamp=datetime.datetime.now(),
         )
         embed.add_field(
@@ -306,13 +286,10 @@ class GodzillaSticker(commands.Cog):
         )
 
         await interaction.response.send_message(embed=embed)
-        audit_log(
-            f"{interaction.user.name} (ID: {interaction.user.id}) used /godzilla_stats in #{interaction.channel.name} (ID: {interaction.channel.id})."
-        )
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info("\033[96mGodzillaSticker\033[0m cog synced successfully.")
+        logging.info("GodzillaSticker cog synced successfully.")
         audit_log("GodzillaSticker cog synced successfully.")
 
 
