@@ -273,7 +273,6 @@ class SecondBestTracker(commands.Cog):
         name="secondbest_rescan",
         description="Scan entire server history for 'second best' occurrences",
     )
-    @app_commands.check(lambda i: i.user.guild_permissions.administrator)
     async def secondbest_rescan(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True, ephemeral=True)
 
