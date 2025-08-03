@@ -1,11 +1,10 @@
 import discord
 import logging
 from discord.ext import commands
-import asyncio
 import datetime
 
-
-STICKER_ID = 1364364888171872256  # Sticker ID for "Godzilla" sticker
+# Sticker ID for "Godzilla"
+STICKER_ID = 1364364888171872256
 
 
 def audit_log(message: str):
@@ -21,15 +20,14 @@ class GodzillaSticker(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # Ignore messages from bots or DMs
+        # Ignore bot messages and DMs
         if message.author.bot or message.guild is None:
             return
 
-        # Check if the message contains "godzilla" (case-insensitive)
         if "godzilla" in message.content.lower():
             try:
-                # Attempt to send the sticker in the same channel
-                await message.channel.send(sticker=discord.Object(STICKER_ID))
+                # Send the sticker using the correct keyword and ID
+                await message.channel.send(stickers=[discord.Object(STICKER_ID)])
                 audit_log(
                     f"Sent Godzilla sticker in #{message.channel.name} (ID: {message.channel.id}) "
                     f"after message by {message.author} (ID: {message.author.id})."
