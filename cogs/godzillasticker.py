@@ -305,7 +305,7 @@ class GodzillaSticker(commands.Cog):
             inline=False,
         )
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed)
         audit_log(
             f"{interaction.user.name} (ID: {interaction.user.id}) used /godzilla_stats in #{interaction.channel.name} (ID: {interaction.channel.id})."
         )

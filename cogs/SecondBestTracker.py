@@ -262,7 +262,8 @@ class SecondBestTracker(commands.Cog):
             inline=False,
         )
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        # send non-ephemeral so everyone can see the leaderboard
+        await interaction.response.send_message(embed=embed)
         audit_log(
             f"{interaction.user.name} (ID: {interaction.user.id}) used "
             f"/secondbest_stats in #{interaction.channel.name} "
@@ -274,16 +275,33 @@ class SecondBestTracker(commands.Cog):
         description="Scan entire server history for 'second best' occurrences",
     )
     async def secondbest_rescan(self, interaction: discord.Interaction):
-        await interaction.response.defer(thinking=True, ephemeral=True)
+        # log start of rescan
+        logging.info(
+            f"User {interaction.user} (ID: {interaction.user.id}) initiated full rescan."
+        )
+        audit_log(
+            f"{interaction.user.name} (ID: {interaction.user.id}) started full history rescan."
+        )
 
+        await interaction.response.defer(thinking=True)
+
+        # clear existing stats
         with sqlite3.connect(DATABASE_PATH) as conn:
             c = conn.cursor()
             c.execute("DELETE FROM second_best_user_count")
             c.execute("DELETE FROM second_best_channel_count")
             conn.commit()
+        logging.info("Cleared existing second_best stats tables.")
+        audit_log("Cleared existing second_best stats tables before rescan.")
 
-        count = 0
+        total_count = 0
         for channel in interaction.guild.text_channels:
+            logging.info(f"Scanning channel #{channel.name} (ID: {channel.id})...")
+            audit_log(
+                f"Scanning channel #{channel.name} (ID: {channel.id}) for 'second best'."
+            )
+            channel_count = 0
+
             try:
                 async for msg in channel.history(limit=None, oldest_first=True):
                     if msg.author.bot:
@@ -291,20 +309,27 @@ class SecondBestTracker(commands.Cog):
                     if contains_second_best(msg.content):
                         increment_sb_stat("second_best_user_count", msg.author.id)
                         increment_sb_stat("second_best_channel_count", channel.id)
-                        count += 1
-            except (discord.Forbidden, discord.HTTPException):
-                logging.warning(f"Could not access history for channel {channel.id}")
+                        channel_count += 1
+                        total_count += 1
+                logging.info(f"Found {channel_count} matches in #{channel.name}.")
+                audit_log(
+                    f"Found {channel_count} occurrences in channel #{channel.name}."
+                )
+            except (discord.Forbidden, discord.HTTPException) as e:
+                logging.warning(
+                    f"Could not scan channel #{channel.name} (ID: {channel.id}): {e}"
+                )
+                audit_log(
+                    f"Failed to scan channel #{channel.name} (ID: {channel.id}): {e}"
+                )
                 continue
 
+        # final report
         await interaction.followup.send(
-            f"Full history scan completed. Found {count} occurrences of 'second best'.",
-            ephemeral=True,
+            f"Full history scan completed. Found {total_count} occurrences of 'second best'."
         )
-        audit_log(
-            f"{interaction.user.name} (ID: {interaction.user.id}) ran /secondbest_rescan "
-            f"in guild {interaction.guild.name} (ID: {interaction.guild.id}). "
-            f"Total occurrences: {count}."
-        )
+        logging.info(f"Rescan complete: {total_count} total matches found.")
+        audit_log(f"Completed full history rescan. Total occurrences: {total_count}.")
 
     @commands.Cog.listener()
     async def on_ready(self):
