@@ -5,6 +5,7 @@ from discord import app_commands
 import datetime
 import sqlite3
 import unicodedata
+import asyncio
 
 DATABASE_PATH = "database.db"
 
@@ -16,124 +17,24 @@ def audit_log(message: str):
 
 
 UNICODE_REPLACE = {
-    "àáâãäåāąă": "a",
-    "çćčĉċ": "c",
-    "ďđð": "d",
-    "èéêëēęěĕė": "e",
-    "ƒ": "f",
-    "ğĝġģ": "g",
-    "ĥħ": "h",
-    "ìíîïīĩĭįı": "i",
-    "ĳ": "ij",
-    "ĵ": "j",
-    "ķĸ": "k",
-    "łľĺļŀ": "l",
-    "ñńňņŉŋ": "n",
-    "òóôõöøōőŏ": "o",
-    "œ": "oe",
-    "ŕřŗ": "r",
-    "śšşŝș": "s",
-    "ťţŧț": "t",
-    "ùúûüūůűŭũų": "u",
-    "ŵ": "w",
-    "ýÿŷ": "y",
-    "žżź": "z",
-    "ß": "ss",
-    "æ": "ae",
-    "ø": "o",
-    "ğ": "g",
-    "ł": "l",
-    "ı": "i",
-    "ś": "s",
-    "ż": "z",
-    "ð": "d",
-    "þ": "th",
-    "ç": "c",
-    "ş": "s",
-    "ğ": "g",
-    "å": "a",
-    "Ö": "O",
-    "Ü": "U",
-    "Ä": "A",
-    "ẞ": "SS",
-    "ａ": "a",
-    "ｂ": "b",
-    "ｃ": "c",
-    "ｄ": "d",
-    "ｅ": "e",
-    "ｆ": "f",
-    "ｇ": "g",
-    "ｈ": "h",
-    "ｉ": "i",
-    "ｊ": "j",
-    "ｋ": "k",
-    "ｌ": "l",
-    "ｍ": "m",
-    "ｎ": "n",
-    "ｏ": "o",
-    "ｐ": "p",
-    "ｑ": "q",
-    "ｒ": "r",
-    "ｓ": "s",
-    "ｔ": "t",
-    "ｕ": "u",
-    "ｖ": "v",
-    "ｗ": "w",
-    "ｘ": "x",
-    "ｙ": "y",
-    "ｚ": "z",
-    "Ａ": "a",
-    "Ｂ": "b",
-    "Ｃ": "c",
-    "Ｄ": "d",
-    "Ｅ": "e",
-    "Ｆ": "f",
-    "Ｇ": "g",
-    "Ｈ": "h",
-    "Ｉ": "i",
-    "Ｊ": "j",
-    "Ｋ": "k",
-    "Ｌ": "l",
-    "Ｍ": "m",
-    "Ｎ": "n",
-    "Ｏ": "o",
-    "Ｐ": "p",
-    "Ｑ": "q",
-    "Ｒ": "r",
-    "Ｓ": "s",
-    "Ｔ": "t",
-    "Ｕ": "u",
-    "Ｖ": "v",
-    "Ｗ": "w",
-    "Ｘ": "x",
-    "Ｙ": "y",
-    "Ｚ": "z",
-    "ɢ": "g",
-    "ᴏ": "o",
-    "ᴅ": "d",
-    "ᴢ": "z",
-    "ɪ": "i",
-    "ʟ": "l",
-    "ʏ": "y",
-    "ᴬ": "a",
-    "ᴮ": "b",
-    "ᴰ": "d",
-    "ᴱ": "e",
-    "ᴳ": "g",
-    "ᴴ": "h",
-    "ᴵ": "i",
-    "ᴶ": "j",
-    "ᴷ": "k",
-    "ᴸ": "l",
-    "ᴹ": "m",
-    "ᴺ": "n",
-    "ᴼ": "o",
-    "ᴾ": "p",
-    "ᴿ": "r",
-    "ᵀ": "t",
-    "ᵁ": "u",
-    "ⱽ": "v",
-    "ᵂ": "w",
+    "àáâãäåāąă": "a", "çćčĉċ": "c", "ďđð": "d", "èéêëēęěĕė": "e",
+    "ƒ": "f", "ğĝġģ": "g", "ĥħ": "h", "ìíîïīĩĭįı": "i", "ĳ": "ij",
+    "ĵ": "j", "ķĸ": "k", "łľĺļŀ": "l", "ñńňņŉŋ": "n", "òóôõöøōőŏ": "o",
+    "œ": "oe", "ŕřŗ": "r", "śšşŝș": "s", "ťţŧț": "t", "ùúûüūůűŭũų": "u",
+    "ŵ": "w", "ýÿŷ": "y", "žżź": "z", "ß": "ss", "æ": "ae", "ø": "o",
+    "ğ": "g", "ł": "l", "ı": "i", "ś": "s", "ż": "z", "ð": "d", "þ": "th",
+    "ç": "c", "ş": "s", "å": "a", "Ö": "O", "Ü": "U", "Ä": "A", "ẞ": "SS",
+    "ａ": "a", "ｂ": "b", "ｃ": "c", "ｄ": "d", "ｅ": "e", "ｆ": "f", "ｇ": "g",
+    "ｈ": "h", "ｉ": "i", "ｊ": "j", "ｋ": "k", "ｌ": "l", "ｍ": "m", "ｎ": "n",
+    "ｏ": "o", "ｐ": "p", "ｑ": "q", "ｒ": "r", "ｓ": "s", "ｔ": "t", "ｕ": "u",
+    "ｖ": "v", "ｗ": "w", "ｘ": "x", "ｙ": "y", "ｚ": "z", "Ａ": "a", "Ｂ": "b",
+    "Ｃ": "c", "Ｄ": "d", "Ｅ": "e", "Ｆ": "f", "Ｇ": "g", "Ｈ": "h", "Ｉ": "i",
+    "Ｊ": "j", "Ｋ": "k", "Ｌ": "l", "Ｍ": "m", "Ｎ": "n", "Ｏ": "o", "Ｐ": "p",
+    "Ｑ": "q", "Ｒ": "r", "Ｓ": "s", "Ｔ": "t", "Ｕ": "u", "Ｖ": "v", "Ｗ": "w",
+    "Ｘ": "x", "Ｙ": "y", "Ｚ": "z", "ɢ": "g", "ᴏ": "o", "ᴅ": "d", "ᴢ": "z",
+    "ɪ": "i", "ʟ": "l", "ʏ": "y", "ᴬ": "a", "ᴮ": "b", "ᴰ": "d", "ᴱ": "e",
+    "ᴳ": "g", "ᴴ": "h", "ᴵ": "i", "ᴶ": "j", "ᴷ": "k", "ᴸ": "l", "ᴹ": "m",
+    "ᴺ": "n", "ᴼ": "o", "ᴾ": "p", "ᴿ": "r", "ᵀ": "t", "ᵁ": "u", "ⱽ": "v", "ᵂ": "w",
 }
 
 
@@ -148,31 +49,25 @@ def normalise_text(text: str) -> str:
 
 
 def contains_second_best(text: str) -> bool:
-    norm = normalise_text(text)
     import re
-
-    return re.search(r"\b[sz]econd be[sz]t\b", norm) is not None
+    return re.search(r"\b[sz]econd be[sz]t\b", normalise_text(text)) is not None
 
 
 def ensure_sb_db_tables():
     with sqlite3.connect(DATABASE_PATH) as conn:
         c = conn.cursor()
-        c.execute(
-            """
+        c.execute("""
             CREATE TABLE IF NOT EXISTS second_best_user_count (
                 user_id INTEGER PRIMARY KEY,
                 count INTEGER NOT NULL
             )
-        """
-        )
-        c.execute(
-            """
+        """)
+        c.execute("""
             CREATE TABLE IF NOT EXISTS second_best_channel_count (
                 channel_id INTEGER PRIMARY KEY,
                 count INTEGER NOT NULL
             )
-        """
-        )
+        """)
         conn.commit()
 
 
@@ -190,22 +85,18 @@ def increment_sb_stat(table: str, id_value: int):
 
 def get_top_sb_users(limit=5):
     with sqlite3.connect(DATABASE_PATH) as conn:
-        c = conn.cursor()
-        c.execute(
+        return conn.execute(
             "SELECT user_id, count FROM second_best_user_count ORDER BY count DESC LIMIT ?",
-            (limit,),
-        )
-        return c.fetchall()
+            (limit,)
+        ).fetchall()
 
 
 def get_top_sb_channels(limit=5):
     with sqlite3.connect(DATABASE_PATH) as conn:
-        c = conn.cursor()
-        c.execute(
+        return conn.execute(
             "SELECT channel_id, count FROM second_best_channel_count ORDER BY count DESC LIMIT ?",
-            (limit,),
-        )
-        return c.fetchall()
+            (limit,)
+        ).fetchall()
 
 
 class SecondBestTracker(commands.Cog):
@@ -262,7 +153,6 @@ class SecondBestTracker(commands.Cog):
             inline=False,
         )
 
-        # send non-ephemeral so everyone can see the leaderboard
         await interaction.response.send_message(embed=embed)
         audit_log(
             f"{interaction.user.name} (ID: {interaction.user.id}) used "
@@ -275,61 +165,51 @@ class SecondBestTracker(commands.Cog):
         description="Scan entire server history for 'second best' occurrences",
     )
     async def secondbest_rescan(self, interaction: discord.Interaction):
-        # log start of rescan
-        logging.info(
-            f"User {interaction.user} (ID: {interaction.user.id}) initiated full rescan."
+        await interaction.response.send_message(
+            "Started rescan in the background. You’ll be DMed when it's done (if possible).",
+            ephemeral=True,
         )
         audit_log(
-            f"{interaction.user.name} (ID: {interaction.user.id}) started full history rescan."
+            f"{interaction.user.name} (ID: {interaction.user.id}) started background rescan."
         )
+        asyncio.create_task(self._background_rescan(interaction.guild, interaction.user))
 
-        await interaction.response.defer(thinking=True)
-
-        # clear existing stats
+    async def _background_rescan(self, guild: discord.Guild, user: discord.User):
         with sqlite3.connect(DATABASE_PATH) as conn:
             c = conn.cursor()
             c.execute("DELETE FROM second_best_user_count")
             c.execute("DELETE FROM second_best_channel_count")
             conn.commit()
-        logging.info("Cleared existing second_best stats tables.")
-        audit_log("Cleared existing second_best stats tables before rescan.")
+        logging.info("Cleared second_best tables.")
+        audit_log("Cleared second_best tables before rescan.")
 
         total_count = 0
-        for channel in interaction.guild.text_channels:
-            logging.info(f"Scanning channel #{channel.name} (ID: {channel.id})...")
-            audit_log(
-                f"Scanning channel #{channel.name} (ID: {channel.id}) for 'second best'."
-            )
-            channel_count = 0
-
+        for channel in guild.text_channels:
+            if not channel.permissions_for(guild.me).read_message_history:
+                continue
             try:
+                count = 0
                 async for msg in channel.history(limit=None, oldest_first=True):
                     if msg.author.bot:
                         continue
                     if contains_second_best(msg.content):
                         increment_sb_stat("second_best_user_count", msg.author.id)
                         increment_sb_stat("second_best_channel_count", channel.id)
-                        channel_count += 1
+                        count += 1
                         total_count += 1
-                logging.info(f"Found {channel_count} matches in #{channel.name}.")
-                audit_log(
-                    f"Found {channel_count} occurrences in channel #{channel.name}."
-                )
+                audit_log(f"Scanned #{channel.name}: {count} matches.")
             except (discord.Forbidden, discord.HTTPException) as e:
-                logging.warning(
-                    f"Could not scan channel #{channel.name} (ID: {channel.id}): {e}"
-                )
-                audit_log(
-                    f"Failed to scan channel #{channel.name} (ID: {channel.id}): {e}"
-                )
+                audit_log(f"Error scanning #{channel.name}: {e}")
                 continue
 
-        # final report
-        await interaction.followup.send(
-            f"Full history scan completed. Found {total_count} occurrences of 'second best'."
-        )
-        logging.info(f"Rescan complete: {total_count} total matches found.")
-        audit_log(f"Completed full history rescan. Total occurrences: {total_count}.")
+        audit_log(f"Rescan complete. Total matches: {total_count}.")
+        try:
+            await user.send(
+                f"✅ Second Best rescan complete for **{guild.name}**.\n"
+                f"Total matches found: **{total_count}**."
+            )
+        except discord.Forbidden:
+            audit_log(f"Could not DM user {user.id} after rescan.")
 
     @commands.Cog.listener()
     async def on_ready(self):
