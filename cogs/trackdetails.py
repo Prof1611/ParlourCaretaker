@@ -66,14 +66,6 @@ class TrackDetails(commands.Cog):
                 "deezer",
                 "tidal",
                 "soundcloud",
-                "pandora",
-                "napster",
-                "yandex",
-                "gaana",
-                "saavn",
-                "anghami",
-                "playMusic",
-                "itune",
             ],
         )
 
@@ -268,13 +260,6 @@ class TrackDetails(commands.Cog):
             "deezer": "Deezer",
             "tidal": "TIDAL",
             "soundcloud": "SoundCloud",
-            "pandora": "Pandora",
-            "napster": "Napster",
-            "yandex": "Yandex Music",
-            "gaana": "Gaana",
-            "saavn": "JioSaavn",
-            "playMusic": "Google Play Music",
-            "itune": "iTunes",
         }
         return mapping.get(key, key.replace("_", " ").title())
 
