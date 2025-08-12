@@ -88,10 +88,8 @@ class TrackDetails(commands.Cog):
             "spotify": "Spotify",
             "appleMusic": "Apple Music",
             "youtube": "YouTube",
-            "youtubeMusic": "YouTube Music",
             "itunes": "iTunes",
             "amazonMusic": "Amazon Music",
-            "amazonStore": "Amazon Store",
             "deezer": "Deezer",
             "tidal": "TIDAL",
             "soundcloud": "SoundCloud",
@@ -107,6 +105,8 @@ class TrackDetails(commands.Cog):
             "boomplay",
             "gaana",
             "saavn",
+            "amazonStore",
+            "youtubeMusic",
         }
 
         audit_log("TrackDetails cog initialised and configuration loaded successfully.")

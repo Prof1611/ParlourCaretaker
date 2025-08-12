@@ -100,7 +100,8 @@ roulette_probabilities:
 giveaway:
   # One or more role IDs whose members can manage giveaways.
   # If this list is empty or missing, the cog allows Manage Server, and Admin always works.
-  manager_role_ids: []
+  manager_role_ids:
+    - 1180166539480137779 # housekeeping staff role
 
   # Role to ping when a new giveaway is posted. Omit or set null to disable.
   # This is sent once when the giveaway is created.
@@ -115,4 +116,3 @@ giveaway:
   labels:
     enter_button_label: "Enter"
     leave_button_label: "Leave"
-
