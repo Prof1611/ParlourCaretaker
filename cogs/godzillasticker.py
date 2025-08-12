@@ -289,9 +289,8 @@ class GodzillaSticker(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info("GodzillaSticker cog synced successfully.")
+        logging.info(f"\033[96mGodzillaSticker\033[0m cog synced successfully.")
         audit_log("GodzillaSticker cog synced successfully.")
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(GodzillaSticker(bot))
