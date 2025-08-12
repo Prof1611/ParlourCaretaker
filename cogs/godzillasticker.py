@@ -204,11 +204,7 @@ def normalise_text(text: str) -> str:
 
 
 def contains_godzilla(text: str) -> bool:
-    """
-    Returns True if the normalized text contains 'godzilla' or 'second best'.
-    """
-    normalized = normalise_text(text)
-    return "godzilla" in normalized or "secondbest" in normalized
+    return "godzilla" in normalise_text(text)
 
 
 class GodzillaSticker(commands.Cog):
