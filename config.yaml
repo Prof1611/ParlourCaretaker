@@ -94,3 +94,25 @@ roulette_probabilities:
   loss: 2.5
   mystery: 1
   
+# ==========================
+# Giveaways configuration
+# ==========================
+giveaway:
+  # One or more role IDs whose members can manage giveaways.
+  # If this list is empty or missing, the cog allows Manage Server, and Admin always works.
+  manager_role_ids: []
+
+  # Role to ping when a new giveaway is posted. Omit or set null to disable.
+  # This is sent once when the giveaway is created.
+  ping_role_id: null
+
+  # Defaults used when the slash command omits these arguments.
+  default_winner_count: 1             # integer >= 1
+  default_duration: "1d"              # supports 30s, 45m, 2h, 1d2h, 45m30s
+  default_max_entries_per_user: 1     # integer >= 1
+
+  # Custom labels for the buttons if you want to brand them.
+  labels:
+    enter_button_label: "Enter"
+    leave_button_label: "Leave"
+
