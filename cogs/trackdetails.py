@@ -102,13 +102,7 @@ class TrackDetails(commands.Cog):
             "deezer": "📡 Deezer",
             "tidal": "💿 TIDAL",
             "soundcloud": "🎧 SoundCloud",
-            "napster": "📼 Napster",
-            "yandex": "📀 Yandex Music",
-            "boomplay": "🎼 Boomplay",
-            "audiomack": "🎹 Audiomack",
-            "gaana": "🎵 Gaana",
-            "saavn": "🎶 JioSaavn",
-            "pandora": "📻 Pandora",
+
         }
 
         audit_log("TrackDetails cog initialised and configuration loaded successfully.")
@@ -313,13 +307,6 @@ class TrackDetails(commands.Cog):
             "deezer": "Deezer",
             "tidal": "TIDAL",
             "soundcloud": "SoundCloud",
-            "pandora": "Pandora",
-            "napster": "Napster",
-            "yandex": "Yandex Music",
-            "gaana": "Gaana",
-            "saavn": "JioSaavn",
-            "playMusic": "Google Play Music",
-            "itune": "iTunes",
         }
         return mapping.get(key, key.replace("_", " ").title())
 
