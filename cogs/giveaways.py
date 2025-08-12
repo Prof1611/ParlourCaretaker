@@ -143,7 +143,7 @@ class GiveawayEntryView(discord.ui.View):
             )
         )
 
-    # Removed the placeholder decorator button that was rendering as a third button
+    # No decorated placeholder button here
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         # All checks are handled in component callbacks registered in the Cog
@@ -341,6 +341,52 @@ class Giveaways(commands.Cog):
 
         return winners, msg
 
+    async def _refresh_giveaway_message(
+        self,
+        guild: discord.Guild,
+        giveaway_id: int,
+        message_hint: Optional[discord.Message] = None,
+    ) -> None:
+        """
+        Rebuild and edit the giveaway embed so 'Entries' and time remaining update.
+        Uses the interaction message if it is the same one to save an API call.
+        """
+        row = self._fetch_giveaway(giveaway_id)
+        if not row:
+            return
+        try:
+            entry_count = self._count_entries(giveaway_id)
+            channel = guild.get_channel(row["channel_id"]) or await guild.fetch_channel(
+                row["channel_id"]
+            )
+
+            # Use the interaction message when possible
+            if message_hint and message_hint.id == row["message_id"]:
+                msg = message_hint
+            else:
+                msg = await channel.fetch_message(row["message_id"])
+
+            embed = self._build_giveaway_embed(
+                guild=guild,
+                prize=row["prize"],
+                description=row["description"],
+                host=guild.get_member(row["host_id"]),
+                end_ts=row["end_time"],
+                winner_count=int(row["winner_count"]),
+                required_role_id=row["required_role_id"],
+                entry_count=entry_count,
+                status=row["status"],
+                message_url=msg.jump_url,
+            )
+            view = (
+                GiveawayEntryView(self, giveaway_id)
+                if row["status"] == "running"
+                else None
+            )
+            await msg.edit(embed=embed, view=view)
+        except Exception as e:
+            logging.warning(f"Failed to refresh giveaway message {giveaway_id}: {e}")
+
     # --------------------------------------------------------
     # Component handling for persistent buttons
     # --------------------------------------------------------
@@ -375,7 +421,7 @@ class Giveaways(commands.Cog):
                 pass
             return
 
-        status = row["status"]  # fixed: read correct column
+        status = row["status"]
         if status != "running":
             try:
                 await interaction.response.send_message(
@@ -408,21 +454,20 @@ class Giveaways(commands.Cog):
         max_entries = row["max_entries_per_user"]
 
         # Role requirement
-        if required_role_id:
-            if not any(r.id == required_role_id for r in member.roles):
-                try:
-                    await interaction.response.send_message(
-                        "You do not have the required role to enter this giveaway.",
-                        ephemeral=True,
-                    )
-                except Exception:
-                    pass
-                return
+        if required_role_id and not any(r.id == required_role_id for r in member.roles):
+            try:
+                await interaction.response.send_message(
+                    "You do not have the required role to enter this giveaway.",
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
+            return
 
         giveaway_id_val = row["giveaway_id"]
+
         # Enter
         if action == "giveaway_enter":
-            # Check existing entry
             cursor.execute(
                 "SELECT entries FROM giveaway_entries WHERE giveaway_id = ? AND user_id = ?",
                 (giveaway_id_val, member.id),
@@ -439,7 +484,6 @@ class Giveaways(commands.Cog):
                     except Exception:
                         pass
                     return
-                # Increment entries
                 cursor.execute(
                     "UPDATE giveaway_entries SET entries = entries + 1 WHERE giveaway_id = ? AND user_id = ?",
                     (giveaway_id_val, member.id),
@@ -465,6 +509,11 @@ class Giveaways(commands.Cog):
                 pass
             audit_log(
                 f"{member} entered giveaway {giveaway_id_val} in guild {guild.id}."
+            )
+
+            # Refresh the public embed
+            await self._refresh_giveaway_message(
+                guild, giveaway_id_val, interaction.message
             )
 
         # Leave
@@ -509,6 +558,11 @@ class Giveaways(commands.Cog):
             except Exception:
                 pass
             audit_log(f"{member} left giveaway {giveaway_id_val} in guild {guild.id}.")
+
+            # Refresh the public embed
+            await self._refresh_giveaway_message(
+                guild, giveaway_id_val, interaction.message
+            )
 
     # --------------------------------------------------------
     # Slash Commands
@@ -933,7 +987,7 @@ class Giveaways(commands.Cog):
         status = row["status"]
         required_role_id = row["required_role_id"]
         max_entries = int(row["max_entries_per_user"])
-        entry_count = int(row["entry_count"])
+        entry_count = self._count_entries(giveaway_id)
 
         message_url = None
         try:
@@ -963,66 +1017,6 @@ class Giveaways(commands.Cog):
         embed.add_field(name="ID", value=str(giveaway_id), inline=True)
         await interaction.response.send_message(embed=embed)
         audit_log(f"Viewed info for giveaway {giveaway_id} in guild {guild.id}.")
-
-    @app_commands.command(
-        name="giveaway_blacklist",
-        description="Add or remove a user from the giveaway blacklist.",
-    )
-    @app_commands.describe(
-        target="User to add or remove.",
-        action="Choose add or remove.",
-        reason="Optional reason when adding.",
-    )
-    @app_commands.choices(
-        action=[
-            app_commands.Choice(name="add", value="add"),
-            app_commands.Choice(name="remove", value="remove"),
-        ]
-    )
-    async def giveaway_blacklist(
-        self,
-        interaction: discord.Interaction,
-        target: discord.Member,
-        action: app_commands.Choice[str],
-        reason: Optional[str] = None,
-    ):
-        actor = interaction.user
-        guild = interaction.guild
-        if not isinstance(actor, discord.Member) or guild is None:
-            await interaction.response.send_message(
-                "This command must be used in a server.", ephemeral=True
-            )
-            return
-
-        if not self._is_manager(actor):
-            await interaction.response.send_message(
-                "You do not have permission to manage the blacklist.", ephemeral=True
-            )
-            return
-
-        if action.value == "add":
-            cursor.execute(
-                "REPLACE INTO giveaway_blacklist (guild_id, user_id, reason) VALUES (?, ?, ?)",
-                (guild.id, target.id, reason or None),
-            )
-            conn.commit()
-            await interaction.response.send_message(
-                f"{target.mention} has been blacklisted from giveaways.", ephemeral=True
-            )
-            audit_log(
-                f"{actor} blacklisted {target} in guild {guild.id}. Reason: {reason or 'None'}"
-            )
-        else:
-            cursor.execute(
-                "DELETE FROM giveaway_blacklist WHERE guild_id = ? AND user_id = ?",
-                (guild.id, target.id),
-            )
-            conn.commit()
-            await interaction.response.send_message(
-                f"{target.mention} has been removed from the giveaway blacklist.",
-                ephemeral=True,
-            )
-            audit_log(f"{actor} removed {target} from blacklist in guild {guild.id}.")
 
     # --------------------------------------------------------
     # Ready: register persistent views for active giveaways
