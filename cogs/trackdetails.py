@@ -165,27 +165,78 @@ class TrackDetails(commands.Cog):
             data.get("linksByPlatform", {}) or {}
         )
 
-        available_platforms = list(links_by_platform.keys())
-        if available_platforms:
-            embed.add_field(
-                name="Available on",
-                value=", ".join(sorted(available_platforms)),
-                inline=False,
-            )
-        else:
-            embed.add_field(
-                name="Available on", value="Unknown or not provided", inline=False
-            )
+        # Mapping of platform keys to friendly names + emojis
+    platform_map = {
+    "spotify": "🎵 Spotify",
+    "appleMusic": "🍎 Apple Music",
+    "youtube": "📺 YouTube",
+    "youtubeMusic": "🎶 YouTube Music",
+    "itunes": "📀 iTunes",
+    "amazonMusic": "📱 Amazon Music",
+    "amazonStore": "🛒 Amazon Store",
+    "deezer": "📡 Deezer",
+    "tidal": "💿 TIDAL",
+    "soundcloud": "🎧 SoundCloud",
+    "napster": "📼 Napster",
+    "yandex": "📀 Yandex Music",
+    "boomplay": "🎼 Boomplay",
+    "audiomack": "🎹 Audiomack",
+    "gaana": "🎵 Gaana",
+    "saavn": "🎶 JioSaavn",
+    "pandora": "📻 Pandora",
+    }
 
-        # Add a few helpful fields if present
-        if details.get("type"):
-            embed.add_field(name="Type", value=str(details.get("type")).title())
-        if details.get("platforms"):
-            embed.add_field(
-                name="Detected platforms",
-                value=", ".join(details.get("platforms")),
-                inline=False,
-            )
+    # Preferred display order (others will follow alphabetically)
+    preferred_order = [
+    "spotify",
+    "appleMusic",
+    "youtube",
+    "youtubeMusic",
+    "itunes",
+    "amazonMusic",
+    "amazonStore",
+    "deezer",
+    "tidal",
+    "soundcloud",
+    "napster",
+    "yandex",
+    "boomplay",
+    "audiomack",
+    "gaana",
+    "saavn",
+    "pandora",
+    ]
+
+# Create nicely formatted list of available platforms
+available_platforms = list(links_by_platform.keys())
+if available_platforms:
+    ordered_platforms = sorted(
+        available_platforms,
+        key=lambda p: preferred_order.index(p) if p in preferred_order else len(preferred_order) + available_platforms.index(p)
+    )
+    formatted_list = "\n".join(
+        platform_map.get(p, p.replace("_", " ").title()) for p in ordered_platforms
+    )
+    embed.add_field(name="Available on", value=formatted_list, inline=False)
+else:
+    embed.add_field(name="Available on", value="Unknown or not provided", inline=False)
+
+# Type field
+if details.get("type"):
+    embed.add_field(name="Type", value=str(details.get("type")).title(), inline=False)
+
+# Detected platforms field (formatted nicely if possible)
+if details.get("platforms"):
+    detected = [
+        platform_map.get(p, p.replace("_", " ").title())
+        for p in details.get("platforms")
+    ]
+    embed.add_field(
+        name="Detected platforms",
+        value=", ".join(detected),
+        inline=False
+    )
+
 
         # Create a view with buttons to common platforms in a sensible order
         view = self.build_platform_buttons(links_by_platform)
