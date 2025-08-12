@@ -170,12 +170,12 @@ class TrackDetails(commands.Cog):
         thumbnail = details.get("thumbnailUrl")
 
         embed = discord.Embed(
-            title=f"{track_name} — {artist_name}",
+            title=f"{track_name} - {artist_name}",
             url=page_url,
             color=self.success_colour,
         )
         if thumbnail:
-            embed.set_thumbnail(url=thumbnail)
+            embed.set_image(url=thumbnail)
 
         links_by_platform: Dict[str, Dict[str, Any]] = (
             data.get("linksByPlatform", {}) or {}
@@ -211,7 +211,7 @@ class TrackDetails(commands.Cog):
                 if p not in self.excluded_platforms
             ]
             embed.add_field(
-                name="Detected platforms",
+                name="Detected platform",
                 value=", ".join(detected),
                 inline=False,
             )
