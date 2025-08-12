@@ -102,7 +102,6 @@ class TrackDetails(commands.Cog):
             "deezer": "📡 Deezer",
             "tidal": "💿 TIDAL",
             "soundcloud": "🎧 SoundCloud",
-
         }
 
         audit_log("TrackDetails cog initialised and configuration loaded successfully.")
