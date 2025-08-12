@@ -42,14 +42,12 @@ class TrackDetails(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-        # Load config if present; fall back to sensible defaults.
         try:
             with open("config.yaml", "r", encoding="utf-8") as f:
                 self.config: Dict[str, Any] = yaml.safe_load(f) or {}
         except Exception:
             self.config = {}
 
-        # Configurable options with defaults
         api_cfg = self.config.get("songlink", {})
         self.api_base: str = api_cfg.get(
             "base_url", "https://api.song.link/v1-alpha.1/links"
@@ -68,6 +66,9 @@ class TrackDetails(commands.Cog):
                 "deezer",
                 "tidal",
                 "soundcloud",
+                "boomplay",
+                "gaana",
+                "saavn",
             ],
         )
 
@@ -82,18 +83,30 @@ class TrackDetails(commands.Cog):
             colours_cfg.get("error", "#ED4245"), discord.Color.red()
         )
 
-        # Mapping of platform keys to friendly names + emojis
+        # Mapping of platform keys to friendly names (no emojis now)
         self.platform_map: Dict[str, str] = {
-            "spotify": "🎵 Spotify",
-            "appleMusic": "🍎 Apple Music",
-            "youtube": "📺 YouTube",
-            "youtubeMusic": "🎶 YouTube Music",
-            "itunes": "📀 iTunes",
-            "amazonMusic": "📱 Amazon Music",
-            "amazonStore": "🛒 Amazon Store",
-            "deezer": "📡 Deezer",
-            "tidal": "💿 TIDAL",
-            "soundcloud": "🎧 SoundCloud",
+            "spotify": "Spotify",
+            "appleMusic": "Apple Music",
+            "youtube": "YouTube",
+            "youtubeMusic": "YouTube Music",
+            "itunes": "iTunes",
+            "amazonMusic": "Amazon Music",
+            "amazonStore": "Amazon Store",
+            "deezer": "Deezer",
+            "tidal": "TIDAL",
+            "soundcloud": "SoundCloud",
+        }
+
+        # Platforms to exclude
+        self.excluded_platforms = {
+            "audiomack",
+            "anghami",
+            "napster",
+            "pandora",
+            "yandex",
+            "boomplay",
+            "gaana",
+            "saavn",
         }
 
         audit_log("TrackDetails cog initialised and configuration loaded successfully.")
@@ -116,7 +129,6 @@ class TrackDetails(commands.Cog):
 
         api_url = f"{self.api_base}?url={url}"
 
-        # Fetch from Songlink/Odesli
         try:
             data = await self.fetch_json(api_url, timeout=self.timeout_seconds)
             if not data:
@@ -135,12 +147,10 @@ class TrackDetails(commands.Cog):
             )
             return
 
-        # Extract entity and details
         entity_id = data.get("entityUniqueId")
         entities = data.get("entitiesByUniqueId", {}) or {}
         details = entities.get(entity_id, {}) if entity_id else {}
 
-        # Fall back if entityUniqueId missing but entities contain one item
         if not details and entities:
             try:
                 details = next(iter(entities.values()))
@@ -159,7 +169,6 @@ class TrackDetails(commands.Cog):
         page_url = data.get("pageUrl") or url
         thumbnail = details.get("thumbnailUrl")
 
-        # Build embed
         embed = discord.Embed(
             title=f"{track_name} — {artist_name}",
             url=page_url,
@@ -168,18 +177,19 @@ class TrackDetails(commands.Cog):
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)
 
-        # Platforms section, formatted nicely with emojis and ordering
         links_by_platform: Dict[str, Dict[str, Any]] = (
             data.get("linksByPlatform", {}) or {}
         )
-        available_platforms = list(links_by_platform.keys())
+        available_platforms = [
+            p for p in links_by_platform.keys() if p not in self.excluded_platforms
+        ]
 
         if available_platforms:
             ordered_platforms = sorted(
                 available_platforms,
                 key=lambda p: self._order_key(p, available_platforms),
             )
-            formatted_list = "\n".join(
+            formatted_list = ", ".join(
                 self.platform_map.get(p, p.replace("_", " ").title())
                 for p in ordered_platforms
             )
@@ -189,17 +199,16 @@ class TrackDetails(commands.Cog):
                 name="Available on", value="Unknown or not provided", inline=False
             )
 
-        # Type field
         if details.get("type"):
             embed.add_field(
                 name="Type", value=str(details.get("type")).title(), inline=False
             )
 
-        # Detected platforms field (formatted nicely if possible)
         if details.get("platforms"):
             detected = [
                 self.platform_map.get(p, p.replace("_", " ").title())
                 for p in details.get("platforms")
+                if p not in self.excluded_platforms
             ]
             embed.add_field(
                 name="Detected platforms",
@@ -207,7 +216,6 @@ class TrackDetails(commands.Cog):
                 inline=False,
             )
 
-        # Create a view with buttons to common platforms in a sensible order
         view = self.build_platform_buttons(links_by_platform)
 
         try:
@@ -223,18 +231,11 @@ class TrackDetails(commands.Cog):
             )
 
     def _order_key(self, platform_key: str, available_platforms: list) -> int:
-        """
-        Helper to create a stable ordering key:
-        - Known platforms ordered by self.common_platform_order index.
-        - Unknown platforms come afterwards in the order they appear.
-        """
         if platform_key in self.common_platform_order:
             return self.common_platform_order.index(platform_key)
-        # place after known list but retain stable order among unknowns
         return len(self.common_platform_order) + available_platforms.index(platform_key)
 
     async def fetch_json(self, url: str, timeout: int = 10) -> Optional[Dict[str, Any]]:
-        """Fetch JSON from a URL using aiohttp with a timeout."""
         timeout_cfg = aiohttp.ClientTimeout(total=timeout)
         async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
             async with session.get(url) as resp:
@@ -249,16 +250,19 @@ class TrackDetails(commands.Cog):
     def build_platform_buttons(
         self, links_by_platform: Dict[str, Dict[str, Any]]
     ) -> Optional[discord.ui.View]:
-        """
-        Build a Discord view containing URL buttons for platforms.
-        Discord allows up to 5 buttons per row and 5 rows total.
-        """
         if not links_by_platform:
             return None
 
-        # Preserve preferred order, then append any extras not in the order list.
-        ordered = [p for p in self.common_platform_order if p in links_by_platform]
-        extras = [p for p in links_by_platform.keys() if p not in ordered]
+        ordered = [
+            p
+            for p in self.common_platform_order
+            if p in links_by_platform and p not in self.excluded_platforms
+        ]
+        extras = [
+            p
+            for p in links_by_platform.keys()
+            if p not in ordered and p not in self.excluded_platforms
+        ]
         final_order = ordered + extras
 
         view = discord.ui.View()
@@ -272,8 +276,6 @@ class TrackDetails(commands.Cog):
 
             label = self.pretty_platform_name(platform)
             try:
-                # Note: URL buttons cannot include emoji in the label reliably across clients,
-                # so we keep labels clean and readable.
                 view.add_item(discord.ui.Button(label=label, url=url))
                 buttons_added += 1
             except Exception:
@@ -285,24 +287,11 @@ class TrackDetails(commands.Cog):
         return view if buttons_added > 0 else None
 
     def pretty_platform_name(self, key: str) -> str:
-        """
-        Convert Songlink platform keys to nicer button labels.
-        Example: 'appleMusic' -> 'Apple Music'
-        """
-        mapping = {
-            "spotify": "Spotify",
-            "appleMusic": "Apple Music",
-            "youtubeMusic": "YouTube Music",
-            "youtube": "YouTube",
-            "amazonMusic": "Amazon Music",
-            "deezer": "Deezer",
-            "tidal": "TIDAL",
-            "soundcloud": "SoundCloud",
-        }
-        return mapping.get(key, key.replace("_", " ").title())
+        if key in self.platform_map:
+            return self.platform_map[key]
+        return key.replace("_", " ").title()
 
     async def send_error(self, interaction: discord.Interaction, message: str):
-        """Send a standardised error embed."""
         embed = discord.Embed(
             title="Error", description=message, color=self.error_colour
         )
