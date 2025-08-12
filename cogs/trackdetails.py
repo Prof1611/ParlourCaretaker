@@ -68,14 +68,6 @@ class TrackDetails(commands.Cog):
                 "deezer",
                 "tidal",
                 "soundcloud",
-                "pandora",
-                "napster",
-                "yandex",
-                "gaana",
-                "saavn",
-                "anghami",
-                "playMusic",
-                "itune",
             ],
         )
 
