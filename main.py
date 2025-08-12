@@ -1,86 +1,155 @@
 import discord
-from discord import app_commands
-from discord.ext import commands
-import aiohttp
+from discord.ext import commands, tasks
+import random
+import discord.utils
+import os
+import yaml
+import asyncio
+import logging
+from dotenv import load_dotenv
+import datetime
 
-GUILD_ID = 1151481698786213960  # Replace with your test guild/server ID (int)
+# Load environment variables from .env file
+load_dotenv()
 
-class TrackDetails(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
 
-    track_group = app_commands.Group(name="track", description="Track related commands")
+# Define ANSI escape sequences for colours
+class CustomFormatter(logging.Formatter):
+    LEVEL_COLOURS = {
+        logging.DEBUG: "\033[0;36m",  # Cyan
+        logging.INFO: "\033[0;32m",  # Green
+        logging.WARNING: "\033[0;33m",  # Yellow
+        logging.ERROR: "\033[0;31m",  # Red
+        logging.CRITICAL: "\033[1;41m",  # Red background w/ bold text
+    }
+    RESET_COLOUR = "\033[0m"
 
-    @track_group.command(name="details", description="Get track details from a Spotify URL")
-    @app_commands.describe(url="Spotify song URL")
-    async def details(self, interaction: discord.Interaction, url: str):
-        await interaction.response.defer()  # Acknowledge command and defer response
-
-        api_url = f"https://api.song.link/v1-alpha.1/links?url={url}"
-
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(api_url) as resp:
-                    if resp.status != 200:
-                        await interaction.followup.send(f"Failed to get data from API, status code: {resp.status}")
-                        return
-                    data = await resp.json()
-            except Exception as e:
-                await interaction.followup.send(f"Error fetching data: {e}")
-                return
-
-        entity = data.get("entityUniqueId", None)
-        if not entity:
-            await interaction.followup.send("No track data found for that URL.")
-            return
-
-        page_url = data.get("pageUrl", "No page URL found")
-        entities = data.get("entitiesByUniqueId", {})
-        details = entities.get(entity, {})
-
-        track_name = details.get("title", "Unknown title")
-        artist_name = details.get("artistName", "Unknown artist")
-        thumbnail = details.get("thumbnailUrl")
-
-        embed = discord.Embed(
-            title=f"{track_name} - {artist_name}",
-            url=page_url,
-            color=discord.Color.green()
+    def format(self, record):
+        level_name = (
+            self.LEVEL_COLOURS.get(record.levelno, self.RESET_COLOUR)
+            + record.levelname
+            + self.RESET_COLOUR
         )
-
-        if thumbnail:
-            embed.set_thumbnail(url=thumbnail)
-
-        platforms = data.get("linksByPlatform", {})
-        platform_names = ", ".join(platforms.keys()) if platforms else "Unknown"
-
-        embed.add_field(name="Available on", value=platform_names, inline=False)
-
-        await interaction.followup.send(embed=embed)
-
-async def setup(bot):
-    await bot.add_cog(TrackDetails(bot))
+        record.levelname = level_name
+        return super().format(record)
 
 
-# ------------- Main bot code -------------
+# Configure logging
+formatter = CustomFormatter(
+    "%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
+)
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+logging.basicConfig(level=logging.INFO, handlers=[handler])
 
-intents = discord.Intents.default()
-bot = commands.Bot(command_prefix="!", intents=intents)
+
+# Audit log function to write events to audit.log
+def audit_log(message: str):
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open("audit.log", "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {message}\n")
+
+
+# Load the config file (UTF-8 for emojis, etc.)
+with open("config.yaml", "r", encoding="utf-8") as config_file:
+    config = yaml.safe_load(config_file)
+
+# Retrieve the bot token from the .env file
+BOT_TOKEN = os.environ.get("TOKEN")
+if BOT_TOKEN is None:
+    logging.error("Bot token not found in .env file. Please set TOKEN!")
+    exit(1)
+
+intents = discord.Intents.all()
+intents.messages = True
+intents.dm_messages = True
+intents.guilds = True
+intents.members = True
+
+# Initialize the bot
+bot = commands.Bot(command_prefix=">", intents=intents)
+
+# Load statuses from the config file
+bot_statuses = random.choice(config["statuses"])
+
+dm_forward_channel_id = config["dm_forward_channel_id"]
+
+
+@tasks.loop(seconds=240)
+async def change_bot_status():
+    """Changes the bot's 'listening' status every 240 seconds."""
+    next_status = random.choice(config["statuses"])
+    activity = discord.Activity(type=discord.ActivityType.listening, name=next_status)
+    await bot.change_presence(status=discord.Status.online, activity=activity)
+
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user} (ID: {bot.user.id})")
+    logging.info(f"Successfully logged in as \033[96m{bot.user}\033[0m")
+    audit_log(f"Bot logged in as {bot.user} (ID: {bot.user.id}).")
+    # Start the status rotation if not already running
+    if not change_bot_status.is_running():
+        change_bot_status.start()
+    # Sync slash commands
     try:
-        guild = discord.Object(id=GUILD_ID)
-        synced = await bot.tree.sync(guild=guild)  # Sync commands to your test guild
-        print(f"Synced {len(synced)} commands to guild {GUILD_ID}")
+        synced_commands = await bot.tree.sync()
+        logging.info(f"Successfully synced {len(synced_commands)} commands.")
+        audit_log(f"Successfully synced {len(synced_commands)} slash commands.")
     except Exception as e:
-        print(f"Failed to sync commands: {e}")
+        logging.error(f"Error syncing application commands: {e}")
+        audit_log(f"Error syncing slash commands: {e}")
+
+
+@bot.event
+async def on_message(message):
+    """
+    Forwards direct messages to the specified channel in your config.
+    Ignores messages from the bot itself.
+    """
+    if message.author == bot.user:
+        return
+
+    # Check if this is a DM
+    if isinstance(message.channel, discord.DMChannel):
+        target_channel = bot.get_channel(dm_forward_channel_id)
+        if target_channel:
+            try:
+                embed = discord.Embed(
+                    title=f"Direct Message from '{message.author}'",
+                    description=message.content,
+                    color=discord.Color.green(),
+                )
+                await target_channel.send(embed=embed)
+                logging.info(
+                    f"DM from {message.author} forwarded to #{target_channel.name}"
+                )
+                audit_log(
+                    f"DM from {message.author} (ID: {message.author.id}) forwarded to channel #{target_channel.name} (ID: {target_channel.id})."
+                )
+            except discord.HTTPException as e:
+                logging.error(f"Error forwarding DM: {e}")
+                audit_log(
+                    f"Error forwarding DM from {message.author} (ID: {message.author.id}): {e}"
+                )
+        else:
+            logging.error("Target channel not found for DM forwarding.")
+            audit_log("Failed to forward DM: target channel not found.")
+
+
+# Load all cogs
+async def load_cogs():
+    """Loads all .py files in the 'cogs' folder as extensions."""
+    for filename in os.listdir("./cogs"):
+        if filename.endswith(".py"):
+            await bot.load_extension(f"cogs.{filename[:-3]}")
+            audit_log(f"Loaded cog: {filename[:-3]}")
+
 
 async def main():
     async with bot:
-        await bot.load_extension("track_cog")  # Make sure this file is named track_cog.py
-        await bot.start("YOUR_BOT_TOKEN")
+        await load_cogs()
+        await bot.start(BOT_TOKEN)
 
-import asyncio
-asyncio.run(main())
+
+if __name__ == "__main__":
+    asyncio.run(main())
