@@ -14,6 +14,7 @@ import re
 # Database setup
 # ============================================================
 conn = sqlite3.connect("database.db", check_same_thread=False)
+conn.row_factory = sqlite3.Row  # allow name-based column access
 cursor = conn.cursor()
 
 # Giveaways table
@@ -142,10 +143,7 @@ class GiveawayEntryView(discord.ui.View):
             )
         )
 
-    @discord.ui.button(label="placeholder", style=discord.ButtonStyle.secondary)
-    async def _dummy(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # This will never render because we manually added buttons above.
-        pass
+    # Removed the placeholder decorator button that was rendering as a third button
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         # All checks are handled in component callbacks registered in the Cog
@@ -238,7 +236,7 @@ class Giveaways(commands.Cog):
             "SELECT user_id FROM giveaway_entries WHERE giveaway_id = ?",
             (giveaway_id,),
         )
-        return [row[0] for row in cursor.fetchall()]
+        return [row["user_id"] for row in cursor.fetchall()]
 
     def _user_is_blacklisted(self, guild_id: int, user_id: int) -> bool:
         cursor.execute(
@@ -347,9 +345,10 @@ class Giveaways(commands.Cog):
     # Component handling for persistent buttons
     # --------------------------------------------------------
     async def on_component_interaction(self, interaction: discord.Interaction):
-        if not interaction.type == discord.InteractionType.component:
+        if interaction.type != discord.InteractionType.component:
             return
-        custom_id = getattr(interaction.data, "get", lambda *_: None)("custom_id")
+        data = interaction.data or {}
+        custom_id = data.get("custom_id")
         if not custom_id:
             return
 
@@ -376,7 +375,7 @@ class Giveaways(commands.Cog):
                 pass
             return
 
-        status = row[11]  # status column
+        status = row["status"]  # fixed: read correct column
         if status != "running":
             try:
                 await interaction.response.send_message(
@@ -405,8 +404,8 @@ class Giveaways(commands.Cog):
                 pass
             return
 
-        required_role_id = row[12]
-        max_entries = row[13]
+        required_role_id = row["required_role_id"]
+        max_entries = row["max_entries_per_user"]
 
         # Role requirement
         if required_role_id:
@@ -420,7 +419,7 @@ class Giveaways(commands.Cog):
                     pass
                 return
 
-        giveaway_id_val = row[0]
+        giveaway_id_val = row["giveaway_id"]
         # Enter
         if action == "giveaway_enter":
             # Check existing entry
@@ -430,7 +429,7 @@ class Giveaways(commands.Cog):
             )
             existing = cursor.fetchone()
             if existing:
-                current_entries = int(existing[0])
+                current_entries = int(existing["entries"])
                 if current_entries >= max_entries:
                     try:
                         await interaction.response.send_message(
@@ -458,7 +457,6 @@ class Giveaways(commands.Cog):
             )
             conn.commit()
 
-            # Acknowledge
             try:
                 await interaction.response.send_message(
                     "You have entered the giveaway. Good luck.", ephemeral=True
@@ -485,7 +483,7 @@ class Giveaways(commands.Cog):
                     pass
                 return
 
-            entries_count = int(existing[0])
+            entries_count = int(existing["entries"])
             if entries_count > 1:
                 cursor.execute(
                     "UPDATE giveaway_entries SET entries = entries - 1 WHERE giveaway_id = ? AND user_id = ?",
@@ -656,7 +654,7 @@ class Giveaways(commands.Cog):
             pass
 
         await interaction.followup.send(
-            f"Giveaway created in {target_channel.mention} for **{prize}**. ID: {giveaway_id}",
+            f"Giveaway created in {target_channel.mention} for **{prize}**. ID: `{giveaway_id}`",
             ephemeral=True,
         )
         audit_log(
@@ -685,13 +683,12 @@ class Giveaways(commands.Cog):
         await interaction.response.defer(ephemeral=False, thinking=True)
 
         row = self._fetch_giveaway(giveaway_id)
-        if not row or row[1] != guild.id:
+        if not row or row["guild_id"] != guild.id:
             await interaction.followup.send(
                 "Giveaway not found in this server.", ephemeral=True
             )
             return
-        status = row[11]
-        if status != "running":
+        if row["status"] != "running":
             await interaction.followup.send(
                 "That giveaway is not running.", ephemeral=True
             )
@@ -704,10 +701,10 @@ class Giveaways(commands.Cog):
         )
         conn.commit()
 
-        channel_id = row[2]
-        message_id = row[3]
-        prize = row[4]
-        winner_count = int(row[9])
+        channel_id = row["channel_id"]
+        message_id = row["message_id"]
+        prize = row["prize"]
+        winner_count = int(row["winner_count"])
         end_ts = unix_now()
 
         # Update original message embed to show ended
@@ -719,11 +716,11 @@ class Giveaways(commands.Cog):
             embed = self._build_giveaway_embed(
                 guild=guild,
                 prize=prize,
-                description=row[5],
-                host=guild.get_member(row[6]),
+                description=row["description"],
+                host=guild.get_member(row["host_id"]),
                 end_ts=end_ts,
                 winner_count=winner_count,
-                required_role_id=row[12],
+                required_role_id=row["required_role_id"],
                 entry_count=self._count_entries(giveaway_id),
                 status="ended",
                 message_url=msg.jump_url,
@@ -737,7 +734,7 @@ class Giveaways(commands.Cog):
         )
 
         await interaction.followup.send(
-            f"Giveaway {giveaway_id} ended. Winners selected: {len(winners)}.",
+            f"Giveaway `{giveaway_id}` ended. Winners selected: {len(winners)}.",
             ephemeral=True,
         )
         audit_log(f"{actor} ended giveaway {giveaway_id} in guild {guild.id}.")
@@ -772,27 +769,28 @@ class Giveaways(commands.Cog):
         await interaction.response.defer(ephemeral=False, thinking=True)
 
         row = self._fetch_giveaway(giveaway_id)
-        if not row or row[1] != guild.id:
+        if not row or row["guild_id"] != guild.id:
             await interaction.followup.send(
                 "Giveaway not found in this server.", ephemeral=True
             )
             return
-        status = row[11]
-        if status not in ("ended", "running"):
+        if row["status"] not in ("ended", "running"):
             await interaction.followup.send(
                 "This giveaway cannot be rerolled.", ephemeral=True
             )
             return
 
-        channel_id = row[2]
-        prize = row[4]
-        winner_count = int(winners) if winners and winners > 0 else int(row[9])
+        channel_id = row["channel_id"]
+        prize = row["prize"]
+        winner_count = (
+            int(winners) if winners and winners > 0 else int(row["winner_count"])
+        )
 
         winners_list, _ = await self._announce_winners(
             interaction, guild, channel_id, giveaway_id, prize, winner_count
         )
         await interaction.followup.send(
-            f"Rerolled giveaway {giveaway_id}. Winners selected: {len(winners_list)}.",
+            f"Rerolled giveaway `{giveaway_id}`. Winners selected: {len(winners_list)}.",
             ephemeral=True,
         )
         audit_log(
@@ -821,13 +819,12 @@ class Giveaways(commands.Cog):
         await interaction.response.defer(ephemeral=False, thinking=True)
 
         row = self._fetch_giveaway(giveaway_id)
-        if not row or row[1] != guild.id:
+        if not row or row["guild_id"] != guild.id:
             await interaction.followup.send(
                 "Giveaway not found in this server.", ephemeral=True
             )
             return
-        status = row[11]
-        if status != "running":
+        if row["status"] != "running":
             await interaction.followup.send(
                 "Only running giveaways can be cancelled.", ephemeral=True
             )
@@ -840,8 +837,8 @@ class Giveaways(commands.Cog):
         conn.commit()
 
         # Update original message
-        channel_id = row[2]
-        message_id = row[3]
+        channel_id = row["channel_id"]
+        message_id = row["message_id"]
         try:
             channel = guild.get_channel(channel_id) or await guild.fetch_channel(
                 channel_id
@@ -849,12 +846,12 @@ class Giveaways(commands.Cog):
             msg = await channel.fetch_message(message_id)
             embed = self._build_giveaway_embed(
                 guild=guild,
-                prize=row[4],
-                description=row[5],
-                host=guild.get_member(row[6]),
+                prize=row["prize"],
+                description=row["description"],
+                host=guild.get_member(row["host_id"]),
                 end_ts=unix_now(),
-                winner_count=int(row[9]),
-                required_role_id=row[12],
+                winner_count=int(row["winner_count"]),
+                required_role_id=row["required_role_id"],
                 entry_count=self._count_entries(giveaway_id),
                 status="cancelled",
                 message_url=msg.jump_url,
@@ -864,7 +861,7 @@ class Giveaways(commands.Cog):
             pass
 
         await interaction.followup.send(
-            f"Giveaway {giveaway_id} cancelled.", ephemeral=True
+            f"Giveaway `{giveaway_id}` cancelled.", ephemeral=True
         )
         audit_log(f"{actor} cancelled giveaway {giveaway_id} in guild {guild.id}.")
 
@@ -891,13 +888,13 @@ class Giveaways(commands.Cog):
 
         lines: List[str] = []
         for row in giveaways:
-            gid = row[0]
-            channel_id = row[2]
-            prize = row[4]
-            end_ts = row[8]
-            entries = row[14]
+            gid = row["giveaway_id"]
+            channel_id = row["channel_id"]
+            prize = row["prize"]
+            end_ts = row["end_time"]
+            entries = row["entry_count"]
             lines.append(
-                f"• ID {gid} in <#{channel_id}> — **{prize}** — ends <t:{end_ts}:R> — entries: {entries}"
+                f"• ID `{gid}` in <#{channel_id}> — **{prize}** — ends <t:{end_ts}:R> — entries: {entries}"
             )
         embed = discord.Embed(
             title="Active Giveaways",
@@ -920,23 +917,23 @@ class Giveaways(commands.Cog):
             return
 
         row = self._fetch_giveaway(giveaway_id)
-        if not row or row[1] != guild.id:
+        if not row or row["guild_id"] != guild.id:
             await interaction.response.send_message(
                 "Giveaway not found in this server.", ephemeral=True
             )
             return
 
-        channel_id = row[2]
-        message_id = row[3]
-        prize = row[4]
-        description = row[5]
-        host_id = row[6]
-        end_ts = row[8]
-        winners = int(row[9])
-        status = row[11]
-        required_role_id = row[12]
-        max_entries = int(row[13])
-        entry_count = int(row[14])
+        channel_id = row["channel_id"]
+        message_id = row["message_id"]
+        prize = row["prize"]
+        description = row["description"]
+        host_id = row["host_id"]
+        end_ts = row["end_time"]
+        winners = int(row["winner_count"])
+        status = row["status"]
+        required_role_id = row["required_role_id"]
+        max_entries = int(row["max_entries_per_user"])
+        entry_count = int(row["entry_count"])
 
         message_url = None
         try:
@@ -1035,11 +1032,12 @@ class Giveaways(commands.Cog):
         try:
             # Re-register persistent views for all running giveaways so buttons continue to work after restarts
             cursor.execute("SELECT giveaway_id FROM giveaways WHERE status = 'running'")
-            ids = [row[0] for row in cursor.fetchall()]
+            ids = [row["giveaway_id"] for row in cursor.fetchall()]
             for gid in ids:
                 self.bot.add_view(GiveawayEntryView(self, gid))
             logging.info(
-                f"\033[96mGiveaways\033[0m cog synced. Persistent views restored for {len(ids)} giveaways."
+                "\033[96mGiveaways\033[0m cog synced. Persistent views restored for %d giveaways.",
+                len(ids),
             )
             audit_log(f"Giveaways cog ready. Restored {len(ids)} persistent views.")
         except Exception as e:
