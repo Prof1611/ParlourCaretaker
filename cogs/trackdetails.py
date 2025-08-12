@@ -68,13 +68,14 @@ class TrackDetails(commands.Cog):
                 "deezer",
                 "tidal",
                 "soundcloud",
+                "pandora",
                 "napster",
                 "yandex",
-                "boomplay",
-                "audiomack",
                 "gaana",
                 "saavn",
-                "pandora",
+                "anghami",
+                "playMusic",
+                "itune",
             ],
         )
 
@@ -303,14 +304,24 @@ class TrackDetails(commands.Cog):
         Convert Songlink platform keys to nicer button labels.
         Example: 'appleMusic' -> 'Apple Music'
         """
-        # Reuse friendly names without emojis for button labels
-        if key in self.platform_map:
-            # strip the emoji if present at the beginning
-            friendly = self.platform_map[key]
-            # split once on space to drop the emoji
-            parts = friendly.split(" ", 1)
-            return parts[1] if len(parts) > 1 else friendly
-        return key.replace("_", " ").title()
+        mapping = {
+            "spotify": "Spotify",
+            "appleMusic": "Apple Music",
+            "youtubeMusic": "YouTube Music",
+            "youtube": "YouTube",
+            "amazonMusic": "Amazon Music",
+            "deezer": "Deezer",
+            "tidal": "TIDAL",
+            "soundcloud": "SoundCloud",
+            "pandora": "Pandora",
+            "napster": "Napster",
+            "yandex": "Yandex Music",
+            "gaana": "Gaana",
+            "saavn": "JioSaavn",
+            "playMusic": "Google Play Music",
+            "itune": "iTunes",
+        }
+        return mapping.get(key, key.replace("_", " ").title())
 
     async def send_error(self, interaction: discord.Interaction, message: str):
         """Send a standardised error embed."""
