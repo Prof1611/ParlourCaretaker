@@ -36,7 +36,7 @@ class TrackDetails(commands.Cog):
     """
     Fetches rich cross-platform track details using the Songlink/Odesli API
     from a supplied Spotify (or other) track URL and returns an embed with
-    platform buttons.
+    a formatted platform list and link buttons.
     """
 
     def __init__(self, bot: commands.Bot):
@@ -60,12 +60,22 @@ class TrackDetails(commands.Cog):
             [
                 "spotify",
                 "appleMusic",
-                "youtubeMusic",
                 "youtube",
+                "youtubeMusic",
+                "itunes",
                 "amazonMusic",
+                "amazonStore",
                 "deezer",
                 "tidal",
                 "soundcloud",
+                "pandora",
+                "napster",
+                "yandex",
+                "gaana",
+                "saavn",
+                "anghami",
+                "playMusic",
+                "itune",
             ],
         )
 
@@ -80,11 +90,32 @@ class TrackDetails(commands.Cog):
             colours_cfg.get("error", "#ED4245"), discord.Color.red()
         )
 
+        # Mapping of platform keys to friendly names + emojis
+        self.platform_map: Dict[str, str] = {
+            "spotify": "🎵 Spotify",
+            "appleMusic": "🍎 Apple Music",
+            "youtube": "📺 YouTube",
+            "youtubeMusic": "🎶 YouTube Music",
+            "itunes": "📀 iTunes",
+            "amazonMusic": "📱 Amazon Music",
+            "amazonStore": "🛒 Amazon Store",
+            "deezer": "📡 Deezer",
+            "tidal": "💿 TIDAL",
+            "soundcloud": "🎧 SoundCloud",
+            "napster": "📼 Napster",
+            "yandex": "📀 Yandex Music",
+            "boomplay": "🎼 Boomplay",
+            "audiomack": "🎹 Audiomack",
+            "gaana": "🎵 Gaana",
+            "saavn": "🎶 JioSaavn",
+            "pandora": "📻 Pandora",
+        }
+
         audit_log("TrackDetails cog initialised and configuration loaded successfully.")
 
     @commands.Cog.listener()
     async def on_ready(self):
-        logging.info(f"\033[96mTrackDetails\033[0m cog synced successfully.")
+        logging.info("\033[96mTrackDetails\033[0m cog synced successfully.")
         audit_log("TrackDetails cog synced successfully.")
 
     @app_commands.command(
@@ -152,30 +183,42 @@ class TrackDetails(commands.Cog):
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)
 
-        # Platforms
+        # Platforms section, formatted nicely with emojis and ordering
         links_by_platform: Dict[str, Dict[str, Any]] = (
             data.get("linksByPlatform", {}) or {}
         )
-
         available_platforms = list(links_by_platform.keys())
+
         if available_platforms:
-            embed.add_field(
-                name="Available on",
-                value=", ".join(sorted(available_platforms)),
-                inline=False,
+            ordered_platforms = sorted(
+                available_platforms,
+                key=lambda p: self._order_key(p, available_platforms),
             )
+            formatted_list = "\n".join(
+                self.platform_map.get(p, p.replace("_", " ").title())
+                for p in ordered_platforms
+            )
+            embed.add_field(name="Available on", value=formatted_list, inline=False)
         else:
             embed.add_field(
                 name="Available on", value="Unknown or not provided", inline=False
             )
 
-        # Add a few helpful fields if present
+        # Type field
         if details.get("type"):
-            embed.add_field(name="Type", value=str(details.get("type")).title())
+            embed.add_field(
+                name="Type", value=str(details.get("type")).title(), inline=False
+            )
+
+        # Detected platforms field (formatted nicely if possible)
         if details.get("platforms"):
+            detected = [
+                self.platform_map.get(p, p.replace("_", " ").title())
+                for p in details.get("platforms")
+            ]
             embed.add_field(
                 name="Detected platforms",
-                value=", ".join(details.get("platforms")),
+                value=", ".join(detected),
                 inline=False,
             )
 
@@ -194,6 +237,17 @@ class TrackDetails(commands.Cog):
                 interaction, f"Failed to send the track details: `{e}`"
             )
 
+    def _order_key(self, platform_key: str, available_platforms: list) -> int:
+        """
+        Helper to create a stable ordering key:
+        - Known platforms ordered by self.common_platform_order index.
+        - Unknown platforms come afterwards in the order they appear.
+        """
+        if platform_key in self.common_platform_order:
+            return self.common_platform_order.index(platform_key)
+        # place after known list but retain stable order among unknowns
+        return len(self.common_platform_order) + available_platforms.index(platform_key)
+
     async def fetch_json(self, url: str, timeout: int = 10) -> Optional[Dict[str, Any]]:
         """Fetch JSON from a URL using aiohttp with a timeout."""
         timeout_cfg = aiohttp.ClientTimeout(total=timeout)
@@ -211,7 +265,7 @@ class TrackDetails(commands.Cog):
         self, links_by_platform: Dict[str, Dict[str, Any]]
     ) -> Optional[discord.ui.View]:
         """
-        Build a Discord view containing URL buttons for common platforms.
+        Build a Discord view containing URL buttons for platforms.
         Discord allows up to 5 buttons per row and 5 rows total.
         """
         if not links_by_platform:
@@ -233,20 +287,19 @@ class TrackDetails(commands.Cog):
 
             label = self.pretty_platform_name(platform)
             try:
+                # Note: URL buttons cannot include emoji in the label reliably across clients,
+                # so we keep labels clean and readable.
                 view.add_item(discord.ui.Button(label=label, url=url))
                 buttons_added += 1
             except Exception:
-                # In case we hit Discord component limits, stop adding more.
                 break
 
-            # Safety: stop at 25 buttons to respect global limits.
             if buttons_added >= 25:
                 break
 
         return view if buttons_added > 0 else None
 
-    @staticmethod
-    def pretty_platform_name(key: str) -> str:
+    def pretty_platform_name(self, key: str) -> str:
         """
         Convert Songlink platform keys to nicer button labels.
         Example: 'appleMusic' -> 'Apple Music'
@@ -260,6 +313,13 @@ class TrackDetails(commands.Cog):
             "deezer": "Deezer",
             "tidal": "TIDAL",
             "soundcloud": "SoundCloud",
+            "pandora": "Pandora",
+            "napster": "Napster",
+            "yandex": "Yandex Music",
+            "gaana": "Gaana",
+            "saavn": "JioSaavn",
+            "playMusic": "Google Play Music",
+            "itune": "iTunes",
         }
         return mapping.get(key, key.replace("_", " ").title())
 
@@ -271,12 +331,11 @@ class TrackDetails(commands.Cog):
         try:
             await interaction.followup.send(embed=embed, ephemeral=True)
         except discord.HTTPException:
-            # Fallback if followup already sent or errored
             try:
                 await interaction.response.send_message(embed=embed, ephemeral=True)
             except Exception:
                 pass
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(TrackDetails(bot))
