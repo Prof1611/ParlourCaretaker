@@ -23,6 +23,9 @@ The Parlour Caretaker is a custom Discord bot designed to assist with moderation
 - **Show Scraping:**  
   Check the band’s website for new shows and update a specified channel with the latest event details.
 
+- **Track Details:**  
+  Allows users to input a song URL which spits out the song link from most major streaming services in an embed message.
+  
 ## Usage
 
 ### Commands
@@ -121,7 +124,7 @@ Persistent data for features like the roulette game and sticky messages are stor
 ## Licence
 
 This project is **not open source**.  
-All rights reserved © 2025 Jay Jones.  
+All rights reserved © 2025 Jay Jones & Harry Waltham.  
 You may not use, distribute, or modify any part of this codebase without explicit written permission.
 
 ## Support
