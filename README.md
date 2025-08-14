@@ -124,7 +124,7 @@ Persistent data for features like the roulette game and sticky messages are stor
 ## Licence
 
 This project is **not open source**.  
-All rights reserved © 2025 Jay Jones.  
+All rights reserved © 2025 Jay Jones & Harry Waltham.  
 You may not use, distribute, or modify any part of this codebase without explicit written permission.
 
 ## Support
