@@ -32,29 +32,37 @@ class Help(commands.Cog):
     async def help(
         self, interaction: discord.Interaction, command: Optional[str] = None
     ):
-        # Do not defer response to avoid delay; this command should respond immediately.
         if command is None:
-            # Build a list of all commands.
-            embed = discord.Embed(
-                title="List of Commands:",
-                description="Use `/help [command]` to see detailed info about a command.",
-                color=discord.Color.blurple(),
-            )
-            for cmd in self.bot.tree.walk_commands():
-                cmd_name = cmd.name
-                cmd_desc = (
-                    cmd.description if cmd.description else "No description available."
+            # Get all commands
+            commands_list = list(self.bot.tree.walk_commands())
+            embeds = []
+
+            # Create embeds with max 25 fields each
+            for i in range(0, len(commands_list), 25):
+                embed = discord.Embed(
+                    title="List of Commands:",
+                    description="Use `/help [command]` to see detailed info about a command.",
+                    color=discord.Color.blurple(),
                 )
-                embed.add_field(name=cmd_name, value=cmd_desc, inline=False)
-            try:
-                await interaction.response.send_message(embed=embed, ephemeral=True)
-            except discord.NotFound:
-                logging.warning("Interaction expired when sending command list.")
+                for cmd in commands_list[i:i+25]:
+                    cmd_name = cmd.name
+                    cmd_desc = cmd.description or "No description available."
+                    embed.add_field(name=cmd_name, value=cmd_desc, inline=False)
+                embeds.append(embed)
+
+            # Send first embed as main response
+            await interaction.response.send_message(embed=embeds[0], ephemeral=True)
+
+            # Send any extra pages as followups
+            for extra_embed in embeds[1:]:
+                await interaction.followup.send(embed=extra_embed, ephemeral=True)
+
             audit_log(
                 f"{interaction.user.name} (ID: {interaction.user.id}) requested a list of commands."
             )
+
         else:
-            # Search for the command (case-insensitive)
+            # Search for specific command
             found_command = None
             for cmd in self.bot.tree.walk_commands():
                 if cmd.name.lower() == command.lower():
@@ -71,65 +79,44 @@ class Help(commands.Cog):
                     value=found_command.description or "No description available.",
                     inline=False,
                 )
-                # Display arguments (parameters) if available.
+
+                # Display arguments if available
                 if hasattr(found_command, "parameters") and found_command.parameters:
+                    option_texts = []
                     if isinstance(found_command.parameters, dict):
-                        option_texts = []
                         for name, param in found_command.parameters.items():
                             req = "Required" if param.required else "Optional"
-                            opt_desc = (
-                                param.description
-                                if param.description
-                                else "No description provided."
-                            )
+                            opt_desc = param.description or "No description provided."
                             option_texts.append(f"`{name}` ({req}) - {opt_desc}")
-                        embed.add_field(
-                            name="Arguments",
-                            value="\n".join(option_texts),
-                            inline=False,
-                        )
                     elif isinstance(found_command.parameters, list):
-                        option_texts = []
                         for param in found_command.parameters:
                             req = "Required" if param.required else "Optional"
-                            opt_desc = (
-                                param.description
-                                if param.description
-                                else "No description provided."
-                            )
+                            opt_desc = param.description or "No description provided."
                             option_texts.append(f"`{param.name}` ({req}) - {opt_desc}")
-                        embed.add_field(
-                            name="Arguments",
-                            value="\n".join(option_texts),
-                            inline=False,
-                        )
+                    embed.add_field(
+                        name="Arguments",
+                        value="\n".join(option_texts),
+                        inline=False,
+                    )
                 else:
                     embed.add_field(
                         name="Arguments",
                         value="This command does not have any arguments.",
                         inline=False,
                     )
-                try:
-                    await interaction.response.send_message(embed=embed, ephemeral=True)
-                except discord.NotFound:
-                    logging.warning(
-                        "Interaction expired when sending detailed command help."
-                    )
+
+                await interaction.response.send_message(embed=embed, ephemeral=True)
                 audit_log(
                     f"{interaction.user.name} (ID: {interaction.user.id}) requested detailed help for /{found_command.name}."
                 )
+
             else:
                 embed = discord.Embed(
                     title="Command Not Found",
                     description=f"No command named `{command}` was found.",
                     color=discord.Color.red(),
                 )
-                try:
-                    await interaction.response.send_message(embed=embed, ephemeral=True)
-                except discord.NotFound:
-                    logging.warning(
-                        "Interaction expired when sending 'Command Not Found' message."
-                    )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
                 audit_log(
                     f"{interaction.user.name} (ID: {interaction.user.id}) requested help for unknown command: {command}."
                 )
