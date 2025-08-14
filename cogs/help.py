@@ -154,54 +154,52 @@ class Help(commands.Cog):
     # Pagination builders
     # -----------------------------
 
-    def build_command_list_pages(
-        self, commands_list: List[Tuple[str, str]]
-    ) -> List[discord.Embed]:
-        """Build paginated embeds for the full command list."""
-        pages: List[discord.Embed] = []
-        current = discord.Embed(
+    def _new_list_embed(self) -> discord.Embed:
+        return discord.Embed(
             title="List of Commands",
             description="Use `/help [command]` to see detailed info about a command.",
             color=discord.Color.blurple(),
         )
-        count_on_page = 0
 
-        def start_new_page() -> discord.Embed:
-            return discord.Embed(
-                title="List of Commands",
-                description="Use `/help [command]` to see detailed info about a command.",
-                color=discord.Color.blurple(),
-            )
+    def build_command_list_pages(
+        self, commands_list: List[Tuple[str, str]]
+    ) -> List[discord.Embed]:
+        """Build paginated embeds for the full command list with hard field and char caps."""
+        pages: List[discord.Embed] = []
+        current = self._new_list_embed()
+        fields_on_page = 0
 
         for name, desc in commands_list:
-            field_name = name[:EMBED_FIELD_NAME_LIMIT]
+            field_name = (name or "unknown")[:EMBED_FIELD_NAME_LIMIT]
             field_value = (desc or "No description available.")[
                 :EMBED_FIELD_VALUE_LIMIT
             ]
 
-            # Decide whether to start a new page
-            needs_new_page = False
-            if count_on_page >= EMBED_MAX_FIELDS:
-                needs_new_page = True
-            else:
-                tentative = current.copy()
-                tentative.add_field(name=field_name, value=field_value, inline=False)
-                if (
-                    len(tentative.fields) > EMBED_MAX_FIELDS
-                    or embed_length(tentative) > EMBED_TOTAL_CHAR_LIMIT
-                ):
-                    needs_new_page = True
-
-            if needs_new_page:
+            # If adding one more field would hit the 25 field cap, start new page now
+            if fields_on_page >= EMBED_MAX_FIELDS:
                 pages.append(current)
-                current = start_new_page()
-                count_on_page = 0
+                current = self._new_list_embed()
+                fields_on_page = 0
+
+            # Check character budget conservatively before adding
+            projected_len = embed_length(current) + len(field_name) + len(field_value)
+            if projected_len > EMBED_TOTAL_CHAR_LIMIT:
+                # Start a new page due to char cap
+                pages.append(current)
+                current = self._new_list_embed()
+                fields_on_page = 0
+
+            # Final guard: if the page is still at cap for any reason, push and start fresh
+            if fields_on_page >= EMBED_MAX_FIELDS:
+                pages.append(current)
+                current = self._new_list_embed()
+                fields_on_page = 0
 
             current.add_field(name=field_name, value=field_value, inline=False)
-            count_on_page += 1
+            fields_on_page += 1
 
-        # Append last page
-        if count_on_page > 0 or not pages:
+        # Append last page, even if empty command list would have produced none
+        if fields_on_page > 0 or not pages:
             pages.append(current)
 
         # Footers
@@ -215,15 +213,47 @@ class Help(commands.Cog):
 
         return pages
 
+    def _new_detail_embed(self, cmd_name: str) -> discord.Embed:
+        return discord.Embed(
+            title=f"Help for /{cmd_name}",
+            color=discord.Color.blurple(),
+        )
+
     def build_detailed_command_pages(
         self, cmd: app_commands.Command
     ) -> List[discord.Embed]:
-        """Build paginated embeds for a specific command with long argument lists."""
+        """Build paginated embeds for a specific command with strict caps."""
         pages: List[discord.Embed] = []
+        current = self._new_detail_embed(cmd.name)
+        fields_on_page = 0
 
+        # Description
         desc = cmd.description or "No description available."
+        if len(desc) <= EMBED_DESCRIPTION_LIMIT:
+            current.description = desc
+        else:
+            current.description = desc[:EMBED_DESCRIPTION_LIMIT]
+            remain = desc[EMBED_DESCRIPTION_LIMIT:]
+            for chunk in chunk_field_value(remain):
+                # Start new page if needed before adding a field
+                if (
+                    fields_on_page >= EMBED_MAX_FIELDS
+                    or (
+                        embed_length(current)
+                        + len("Description (continued)")
+                        + len(chunk)
+                    )
+                    > EMBED_TOTAL_CHAR_LIMIT
+                ):
+                    pages.append(current)
+                    current = self._new_detail_embed(cmd.name)
+                    fields_on_page = 0
+                current.add_field(
+                    name="Description (continued)", value=chunk, inline=False
+                )
+                fields_on_page += 1
 
-        # Gather parameters from Application Command API
+        # Arguments
         option_lines: List[str] = []
         params = getattr(cmd, "parameters", None)
         if params:
@@ -247,69 +277,37 @@ class Help(commands.Cog):
                         f"`{pname}` ({'Required' if required else 'Optional'}) - {pdesc}"
                     )
 
-        def new_embed() -> discord.Embed:
-            return discord.Embed(
-                title=f"Help for /{cmd.name}",
-                color=discord.Color.blurple(),
-            )
-
-        current = new_embed()
-
-        # Description with overflow handling
-        if len(desc) <= EMBED_DESCRIPTION_LIMIT:
-            current.description = desc
-        else:
-            current.description = desc[:EMBED_DESCRIPTION_LIMIT]
-            remain = desc[EMBED_DESCRIPTION_LIMIT:]
-            for chunk in chunk_field_value(remain):
-                tentative = current.copy()
-                tentative.add_field(
-                    name="Description (continued)", value=chunk, inline=False
-                )
-                if (
-                    len(tentative.fields) > EMBED_MAX_FIELDS
-                    or embed_length(tentative) > EMBED_TOTAL_CHAR_LIMIT
-                ):
-                    pages.append(current)
-                    current = new_embed()
-                current.add_field(
-                    name="Description (continued)", value=chunk, inline=False
-                )
-
-        # Arguments
         if option_lines:
             options_text = "\n".join(option_lines)
             chunks = chunk_field_value(options_text, EMBED_FIELD_VALUE_LIMIT)
             for i, chunk in enumerate(chunks, start=1):
                 field_name = "Arguments" if i == 1 else f"Arguments (continued {i})"
-                tentative = current.copy()
-                tentative.add_field(name=field_name, value=chunk, inline=False)
+                # Ensure room for the field
                 if (
-                    len(tentative.fields) > EMBED_MAX_FIELDS
-                    or embed_length(tentative) > EMBED_TOTAL_CHAR_LIMIT
+                    fields_on_page >= EMBED_MAX_FIELDS
+                    or (embed_length(current) + len(field_name) + len(chunk))
+                    > EMBED_TOTAL_CHAR_LIMIT
                 ):
                     pages.append(current)
-                    current = new_embed()
+                    current = self._new_detail_embed(cmd.name)
+                    fields_on_page = 0
                 current.add_field(name=field_name, value=chunk, inline=False)
+                fields_on_page += 1
         else:
-            tentative = current.copy()
-            tentative.add_field(
-                name="Arguments",
-                value="This command does not have any arguments.",
-                inline=False,
-            )
+            field_name = "Arguments"
+            field_value = "This command does not have any arguments."
             if (
-                len(tentative.fields) > EMBED_MAX_FIELDS
-                or embed_length(tentative) > EMBED_TOTAL_CHAR_LIMIT
+                fields_on_page >= EMBED_MAX_FIELDS
+                or (embed_length(current) + len(field_name) + len(field_value))
+                > EMBED_TOTAL_CHAR_LIMIT
             ):
                 pages.append(current)
-                current = new_embed()
-            current.add_field(
-                name="Arguments",
-                value="This command does not have any arguments.",
-                inline=False,
-            )
+                current = self._new_detail_embed(cmd.name)
+                fields_on_page = 0
+            current.add_field(name=field_name, value=field_value, inline=False)
+            fields_on_page += 1
 
+        # Push final page
         pages.append(current)
 
         # Footers
@@ -337,7 +335,7 @@ class Help(commands.Cog):
     async def help(
         self, interaction: discord.Interaction, command: Optional[str] = None
     ):
-        # If a specific command is requested
+        # Specific command help
         if command:
             found_command: Optional[app_commands.Command] = None
             for cmd in self.bot.tree.walk_commands():
@@ -380,10 +378,9 @@ class Help(commands.Cog):
             )
             return
 
-        # Otherwise list all slash commands
+        # Full list of slash commands
         all_cmds: List[Tuple[str, str]] = []
         for cmd in self.bot.tree.walk_commands():
-            # Only include slash commands, skip context menus for clarity
             if isinstance(cmd, app_commands.Command):
                 name = cmd.name
                 desc = cmd.description or "No description available."
@@ -407,6 +404,15 @@ class Help(commands.Cog):
             return
 
         pages = self.build_command_list_pages(all_cmds)
+        # Safety assert: pages must contain only embeds with <= 25 fields
+        for idx, emb in enumerate(pages):
+            if len(emb.fields) > EMBED_MAX_FIELDS:
+                logging.error(
+                    f"Help pagination bug: page {idx} built with {len(emb.fields)} fields."
+                )
+                # As an emergency fallback, slice to 25 to avoid HTTP 400
+                emb.fields = emb.fields[:EMBED_MAX_FIELDS]
+
         view = PagedView(user_id=interaction.user.id, pages=pages)
         try:
             await interaction.response.send_message(
