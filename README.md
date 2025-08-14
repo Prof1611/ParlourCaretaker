@@ -24,7 +24,7 @@ The Parlour Caretaker is a custom Discord bot designed to assist with moderation
   Check the band’s website for new shows and update a specified channel with the latest event details.
 
 - **Track Details:**  
-  Allows users to input a song URL which spits out the song link from most major streaming services in an embded message.
+  Allows users to input a song URL which spits out the song link from most major streaming services in an embed message.
   
 ## Usage
 
