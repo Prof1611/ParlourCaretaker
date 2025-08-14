@@ -105,6 +105,7 @@ class TrackDetails(commands.Cog):
             "saavn",
             "amazonStore",
             "youtubeMusic",
+            "itunes",
         }
 
         audit_log("TrackDetails cog initialised and configuration loaded successfully.")
