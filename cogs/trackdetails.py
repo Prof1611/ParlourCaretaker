@@ -6,7 +6,7 @@ from discord.ext import commands
 import aiohttp
 import asyncio
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 
 def audit_log(message: str):
@@ -53,7 +53,7 @@ class TrackDetails(commands.Cog):
             "base_url", "https://api.song.link/v1-alpha.1/links"
         )
         self.timeout_seconds: int = int(api_cfg.get("timeout_seconds", 12))
-        self.common_platform_order = api_cfg.get(
+        self.common_platform_order: List[str] = api_cfg.get(
             "platform_order",
             [
                 "spotify",
@@ -82,7 +82,7 @@ class TrackDetails(commands.Cog):
             colours_cfg.get("error", "#ED4245"), discord.Color.red()
         )
 
-        # Mapping of platform keys to friendly names (no emojis now)
+        # Mapping of platform keys to friendly names
         self.platform_map: Dict[str, str] = {
             "spotify": "Spotify",
             "appleMusic": "Apple Music",
@@ -119,7 +119,9 @@ class TrackDetails(commands.Cog):
         name="track",
         description="Get cross-platform track details from a Spotify (or other) URL",
     )
-    @app_commands.describe(url="A Spotify, Apple Music, YouTube, or other track URL")
+    @app_commands.describe(
+        url="A Spotify, Apple Music, YouTube, or other track URL",
+    )
     async def track(self, interaction: discord.Interaction, url: str):
         await interaction.response.defer()
         audit_log(
@@ -168,11 +170,14 @@ class TrackDetails(commands.Cog):
         page_url = data.get("pageUrl") or url
         thumbnail = details.get("thumbnailUrl")
 
+        title_text = f"{track_name} - {artist_name}"
         embed = discord.Embed(
-            title=f"{track_name} - {artist_name}",
+            title=title_text,
             url=page_url,
             color=self.success_colour,
         )
+
+        # Use full-size image if available
         if thumbnail:
             embed.set_image(url=thumbnail)
 
@@ -183,16 +188,23 @@ class TrackDetails(commands.Cog):
             p for p in links_by_platform.keys() if p not in self.excluded_platforms
         ]
 
-        if available_platforms:
-            ordered_platforms = sorted(
-                available_platforms,
-                key=lambda p: self._order_key(p, available_platforms),
+        ordered_platforms = sorted(
+            available_platforms,
+            key=lambda p: self._order_key(p, available_platforms),
+        )
+
+        friendly_platforms = [
+            self.platform_map.get(p, p.replace("_", " ").title())
+            for p in ordered_platforms
+        ]
+
+        # Standard richer layout
+        if friendly_platforms:
+            embed.add_field(
+                name="Available on",
+                value=", ".join(friendly_platforms),
+                inline=False,
             )
-            formatted_list = ", ".join(
-                self.platform_map.get(p, p.replace("_", " ").title())
-                for p in ordered_platforms
-            )
-            embed.add_field(name="Available on", value=formatted_list, inline=False)
         else:
             embed.add_field(
                 name="Available on", value="Unknown or not provided", inline=False
@@ -200,7 +212,7 @@ class TrackDetails(commands.Cog):
 
         if details.get("type"):
             embed.add_field(
-                name="Type", value=str(details.get("type")).title(), inline=False
+                name="Type", value=str(details.get("type")).title(), inline=True
             )
 
         if details.get("platforms"):
@@ -209,11 +221,12 @@ class TrackDetails(commands.Cog):
                 for p in details.get("platforms")
                 if p not in self.excluded_platforms
             ]
-            embed.add_field(
-                name="Detected platform",
-                value=", ".join(detected),
-                inline=False,
-            )
+            if detected:
+                embed.add_field(
+                    name="Detected platform",
+                    value=", ".join(detected),
+                    inline=True,
+                )
 
         view = self.build_platform_buttons(links_by_platform)
 
@@ -233,6 +246,18 @@ class TrackDetails(commands.Cog):
         if platform_key in self.common_platform_order:
             return self.common_platform_order.index(platform_key)
         return len(self.common_platform_order) + available_platforms.index(platform_key)
+
+    def _shorten_list(self, items: List[str], max_items: int = 5) -> str:
+        """
+        Return a compact comma separated list with a +N more suffix if needed.
+        """
+        if not items:
+            return ""
+        if len(items) <= max_items:
+            return ", ".join(items)
+        shown = ", ".join(items[:max_items])
+        more = len(items) - max_items
+        return f"{shown} +{more} more"
 
     async def fetch_json(self, url: str, timeout: int = 10) -> Optional[Dict[str, Any]]:
         timeout_cfg = aiohttp.ClientTimeout(total=timeout)
