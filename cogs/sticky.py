@@ -10,8 +10,6 @@ from typing import Optional, Dict
 
 # Define invisible marker for sticky messages using zero-width characters.
 STICKY_MARKER = "\u200b\u200c\u200d\u2060"
-# Extra footer marker for embed stickies for more reliable detection going forward.
-STICKY_FOOTER_MARKER = "sticky"
 
 
 def audit_log(message: str):
@@ -388,20 +386,11 @@ class Sticky(commands.Cog):
         if msg.content and msg.content.endswith(STICKY_MARKER):
             return True
 
-        # Embed sticky, check description and footer
+        # Embed sticky, check description
         if msg.embeds:
             e = msg.embeds[0]
             try:
                 if e.description and e.description.endswith(STICKY_MARKER):
-                    return True
-            except Exception:
-                pass
-            try:
-                if (
-                    e.footer
-                    and e.footer.text
-                    and STICKY_FOOTER_MARKER in e.footer.text.lower()
-                ):
                     return True
             except Exception:
                 pass
@@ -459,8 +448,6 @@ class Sticky(commands.Cog):
                 description=f"{content}{STICKY_MARKER}",
                 color=discord.Color(colour_value),
             )
-            # Add footer marker to make future detection unambiguous
-            embed.set_footer(text=STICKY_FOOTER_MARKER)
             return await channel.send(embed=embed)
         else:
             return await channel.send(f"{content}{STICKY_MARKER}")
