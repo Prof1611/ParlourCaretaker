@@ -204,7 +204,7 @@ class Help(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.Cog.listener())
+    @commands.Cog.listener()
     async def on_ready(self):
         logging.info("\033[96mHelp\033[0m cog synced successfully.")
         audit_log("Help cog synced successfully.")
