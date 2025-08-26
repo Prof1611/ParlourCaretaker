@@ -56,6 +56,76 @@ def chunk_field_value(text: str, limit: int = EMBED_FIELD_VALUE_LIMIT) -> List[s
     return parts
 
 
+def _is_channel_nsfw(channel: Optional[discord.abc.GuildChannel]) -> bool:
+    """Best effort NSFW check for text channels and threads."""
+    if channel is None:
+        return False
+    if isinstance(channel, discord.TextChannel):
+        return channel.is_nsfw()
+    if isinstance(channel, discord.Thread):
+        parent = channel.parent
+        return bool(parent and parent.is_nsfw())
+    if isinstance(channel, discord.ForumChannel):
+        return channel.is_nsfw()
+    return False
+
+
+def _user_has_required_perms(member: discord.Member, required: discord.Permissions) -> bool:
+    """Return True if member's guild permissions satisfy all required bits."""
+    if member.guild is None:
+        return False
+    # Administrators implicitly have all permissions
+    if member.guild_permissions.administrator:
+        return True
+    # Permissions has a value bitfield; ensure all required bits are present
+    user_bits = member.guild_permissions.value
+    req_bits = required.value
+    return (user_bits & req_bits) == req_bits
+
+
+def can_user_run_command(
+    interaction: discord.Interaction, cmd: app_commands.Command
+) -> bool:
+    """
+    Heuristic filter for whether the invoking user can use this command here.
+    Notes and limitations:
+    - Respects dm_permission, NSFW flag, and default_member_permissions.
+    - Cannot read role allow/deny restrictions configured in Server Settings → Integrations.
+    """
+    # DM availability
+    if interaction.guild is None:
+        # In DMs only allow commands with dm_permission True
+        if hasattr(cmd, "dm_permission") and cmd.dm_permission is False:
+            return False
+    else:
+        # In guilds only: if command forbids DMs, that is fine; we are in a guild.
+        pass
+
+    # NSFW-only command must be used in an NSFW channel
+    if getattr(cmd, "nsfw", False):
+        if interaction.guild is None:
+            return False
+        if not _is_channel_nsfw(interaction.channel):  # type: ignore[arg-type]
+            return False
+
+    # Default member permissions check (guild only)
+    if interaction.guild is not None:
+        req_perms = getattr(cmd, "default_member_permissions", None)
+        if isinstance(req_perms, discord.Permissions):
+            member = interaction.user
+            if isinstance(member, discord.Member):
+                if not _user_has_required_perms(member, req_perms):
+                    return False
+            else:
+                # If for some reason we do not have a Member object, be conservative
+                return False
+
+    # If the command is part of a guild and command is disabled at guild scope,
+    # discord.py does not expose that directly; we cannot check it here.
+
+    return True
+
+
 class PagedView(discord.ui.View):
     """Button view that paginates through a list of embeds. Restricted to the requesting user."""
 
@@ -134,7 +204,7 @@ class Help(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.Cog.listener()
+    @commands.Cog.listener())
     async def on_ready(self):
         logging.info("\033[96mHelp\033[0m cog synced successfully.")
         audit_log("Help cog synced successfully.")
@@ -142,7 +212,7 @@ class Help(commands.Cog):
     def _new_list_embed(self) -> discord.Embed:
         return discord.Embed(
             title="List of Commands",
-            description="Use `/help [command]` to see detailed info about a command.",
+            description="Only commands you can use here are shown. Use `/help [command]` for details.",
             color=discord.Color.blurple(),
         )
 
@@ -271,9 +341,27 @@ class Help(commands.Cog):
 
         return pages
 
+    def _collect_visible_commands(
+        self, interaction: discord.Interaction
+    ) -> List[app_commands.Command]:
+        """Return commands the invoking user can reasonably run here."""
+        visible: List[app_commands.Command] = []
+        for cmd in self.bot.tree.walk_commands():
+            if not isinstance(cmd, app_commands.Command):
+                continue
+            # Hide context menu commands in this help, only slash commands
+            if getattr(cmd, "guild_only", False) and interaction.guild is None:
+                # discord.py sets dm_permission False for guild_only. Covered next.
+                pass
+            if can_user_run_command(interaction, cmd):
+                visible.append(cmd)
+        # Sort by name for stable output
+        visible.sort(key=lambda c: c.name)
+        return visible
+
     @app_commands.command(
         name="help",
-        description="Displays a list of commands or detailed info about a specific command.",
+        description="Displays a list of commands you can use here, or details for a specific command.",
     )
     @app_commands.describe(
         command="Optional: The name of the command for detailed help."
@@ -281,109 +369,83 @@ class Help(commands.Cog):
     async def help(
         self, interaction: discord.Interaction, command: Optional[str] = None
     ):
-        # Do not defer response to avoid delay; this command should respond immediately.
-        if command is None:
-            # Build a list of all commands.
-            embed = discord.Embed(
-                title="List of Commands:",
-                description="Use `/help [command]` to see detailed info about a command.",
-                color=discord.Color.blurple(),
-            )
-            for cmd in self.bot.tree.walk_commands():
-                cmd_name = cmd.name
-                cmd_desc = (
-                    cmd.description if cmd.description else "No description available."
+        try:
+            if command is None:
+                # Build list from only visible commands
+                visible_cmds = self._collect_visible_commands(interaction)
+                cmds: List[Tuple[str, str]] = []
+                for c in visible_cmds:
+                    name = getattr(c, "name", "unknown")[:EMBED_FIELD_NAME_LIMIT]
+                    desc = getattr(c, "description", "") or "No description available."
+                    cmds.append((name, desc))
+
+                if not cmds:
+                    embed = discord.Embed(
+                        title="No Commands Available",
+                        description="You do not have permission to use any commands here.",
+                        color=discord.Color.red(),
+                    )
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                    return
+
+                pages = self.build_command_list_pages(cmds)
+                view = PagedView(interaction.user.id, pages)
+                await interaction.response.send_message(
+                    embed=pages[0], view=view, ephemeral=True
                 )
-                embed.add_field(name=cmd_name, value=cmd_desc, inline=False)
-            try:
-                await interaction.response.send_message(embed=embed, ephemeral=True)
-            except discord.NotFound:
-                logging.warning("Interaction expired when sending command list.")
-            audit_log(
-                f"{interaction.user.name} (ID: {interaction.user.id}) requested a list of commands."
-            )
-        else:
-            # Search for the command (case-insensitive)
+                audit_log(
+                    f"{interaction.user.name} (ID: {interaction.user.id}) requested a filtered list of commands."
+                )
+                return
+
+            # Detailed help for a specific command, respecting visibility
             found_command = None
             for cmd in self.bot.tree.walk_commands():
-                if (
-                    isinstance(cmd, app_commands.Command)
-                    and cmd.name.lower() == command.lower()
-                ):
+                if isinstance(cmd, app_commands.Command) and cmd.name.lower() == command.lower():
                     found_command = cmd
                     break
-            if found_command:
-                embed = discord.Embed(
-                    title=f"Help for /{found_command.name}",
-                    color=discord.Color.blurple(),
+
+            if found_command and can_user_run_command(interaction, found_command):
+                pages = self.build_detailed_command_pages(found_command)
+                view = PagedView(interaction.user.id, pages)
+                await interaction.response.send_message(
+                    embed=pages[0], view=view, ephemeral=True
                 )
-                embed.add_field(
-                    name="Description",
-                    value=found_command.description or "No description available.",
-                    inline=False,
-                )
-                # Display arguments (parameters) if available.
-                if hasattr(found_command, "parameters") and found_command.parameters:
-                    if isinstance(found_command.parameters, dict):
-                        option_texts = []
-                        for name, param in found_command.parameters.items():
-                            req = "Required" if param.required else "Optional"
-                            opt_desc = (
-                                param.description
-                                if param.description
-                                else "No description provided."
-                            )
-                            option_texts.append(f"`{name}` ({req}) - {opt_desc}")
-                        embed.add_field(
-                            name="Arguments",
-                            value="\n".join(option_texts),
-                            inline=False,
-                        )
-                    elif isinstance(found_command.parameters, list):
-                        option_texts = []
-                        for param in found_command.parameters:
-                            req = "Required" if param.required else "Optional"
-                            opt_desc = (
-                                param.description
-                                if param.description
-                                else "No description provided."
-                            )
-                            option_texts.append(f"`{param.name}` ({req}) - {opt_desc}")
-                        embed.add_field(
-                            name="Arguments",
-                            value="\n".join(option_texts),
-                            inline=False,
-                        )
-                else:
-                    embed.add_field(
-                        name="Arguments",
-                        value="This command does not have any arguments.",
-                        inline=False,
-                    )
-                try:
-                    await interaction.response.send_message(embed=embed, ephemeral=True)
-                except discord.NotFound:
-                    logging.warning(
-                        "Interaction expired when sending detailed command help."
-                    )
                 audit_log(
                     f"{interaction.user.name} (ID: {interaction.user.id}) requested detailed help for /{found_command.name}."
                 )
+            elif found_command:
+                embed = discord.Embed(
+                    title="Insufficient Permission",
+                    description=f"You do not have permission to use `/ {found_command.name}` here.",
+                    color=discord.Color.red(),
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
             else:
                 embed = discord.Embed(
                     title="Command Not Found",
                     description=f"No command named `{command}` was found.",
                     color=discord.Color.red(),
                 )
-                try:
-                    await interaction.response.send_message(embed=embed, ephemeral=True)
-                except discord.NotFound:
-                    logging.warning(
-                        "Interaction expired when sending 'Command Not Found' message."
-                    )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
                 audit_log(
                     f"{interaction.user.name} (ID: {interaction.user.id}) requested help for unknown command: {command}."
                 )
+        except discord.NotFound:
+            logging.warning("Interaction expired before response could be sent.")
+        except discord.HTTPException as e:
+            logging.exception(f"Failed to send help message: {e}")
+            try:
+                if interaction.response.is_done():
+                    await interaction.followup.send(
+                        "Sorry, I could not send the help message due to a Discord error.", ephemeral=True
+                    )
+                else:
+                    await interaction.response.send_message(
+                        "Sorry, I could not send the help message due to a Discord error.", ephemeral=True
+                    )
+            except Exception:
+                pass
 
 
 async def setup(bot: commands.Bot):
