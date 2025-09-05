@@ -135,4 +135,5 @@ For any bugs or feature requests, feel free to open an issue in the [Issues](htt
 
 ## Maintained by:
 
-- **GitHub:** [Prof1611](https://github.com/Prof1611) | **Discord:** Tygafire  
+- **GitHub:** [Prof1611](https://github.com/Prof1611) | **Discord:** Tygafire
+- **Github:** [Harry](https://github.com/MichaelEavis) | **Discord:** Harry0278
