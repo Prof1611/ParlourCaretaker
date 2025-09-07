@@ -83,6 +83,37 @@ cursor.execute(
 conn.commit()
 
 
+def _column_names(table: str) -> List[str]:
+    cursor.execute(f"PRAGMA table_info({table})")
+    return [row["name"] for row in cursor.fetchall()]
+
+
+def _ensure_schema() -> None:
+    """
+    Add idempotency columns so the DB communicates clearly:
+      - giveaways.winners_drawn: 0/1 flag indicating whether original winners were chosen
+      - giveaways.winners_message_id: message id of the original winners announcement
+      - giveaways.winners_announced_at: unix time when the original announcement was posted
+    """
+    cols = _column_names("giveaways")
+
+    if "winners_drawn" not in cols:
+        cursor.execute("ALTER TABLE giveaways ADD COLUMN winners_drawn INTEGER NOT NULL DEFAULT 0")
+    if "winners_message_id" not in cols:
+        cursor.execute("ALTER TABLE giveaways ADD COLUMN winners_message_id INTEGER")
+    if "winners_announced_at" not in cols:
+        cursor.execute("ALTER TABLE giveaways ADD COLUMN winners_announced_at INTEGER")
+
+    # Normalise any NULLs that may exist after adding columns
+    cursor.execute("UPDATE giveaways SET winners_drawn = COALESCE(winners_drawn, 0)")
+    cursor.execute("UPDATE giveaways SET winners_message_id = NULL WHERE winners_message_id IS NOT NULL AND CAST(winners_message_id AS TEXT) = ''")
+    cursor.execute("UPDATE giveaways SET winners_announced_at = NULL WHERE winners_announced_at IS NOT NULL AND CAST(winners_announced_at AS TEXT) = ''")
+    conn.commit()
+
+
+_ensure_schema()
+
+
 def audit_log(message: str):
     """Append a timestamped message to the audit log file."""
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -320,16 +351,15 @@ class Giveaways(commands.Cog):
         is_reroll: bool,
         message_id: Optional[int],
     ) -> None:
-        if not winners:
-            return
         ts = unix_now()
         rows = [
             (giveaway_id, uid, ts, 1 if is_reroll else 0, message_id) for uid in winners
         ]
-        cursor.executemany(
-            "INSERT INTO giveaway_winners (giveaway_id, user_id, announced_at, is_reroll, message_id) VALUES (?, ?, ?, ?, ?)",
-            rows,
-        )
+        if rows:
+            cursor.executemany(
+                "INSERT INTO giveaway_winners (giveaway_id, user_id, announced_at, is_reroll, message_id) VALUES (?, ?, ?, ?, ?)",
+                rows,
+            )
         conn.commit()
 
     def _has_original_winners(self, giveaway_id: int) -> bool:
@@ -339,20 +369,191 @@ class Giveaways(commands.Cog):
         )
         return cursor.fetchone() is not None
 
-    def _fetch_winners(
-        self, giveaway_id: int, is_reroll: Optional[bool] = None
-    ) -> List[sqlite3.Row]:
-        if is_reroll is None:
-            cursor.execute(
-                "SELECT * FROM giveaway_winners WHERE giveaway_id = ? ORDER BY id ASC",
-                (giveaway_id,),
+    def _existing_original_winner_ids(self, giveaway_id: int) -> List[int]:
+        cursor.execute(
+            "SELECT user_id FROM giveaway_winners WHERE giveaway_id = ? AND is_reroll = 0 ORDER BY id ASC",
+            (giveaway_id,),
+        )
+        return [row["user_id"] for row in cursor.fetchall()]
+
+    def _mark_winners_drawn(self, giveaway_id: int) -> None:
+        cursor.execute(
+            "UPDATE giveaways SET winners_drawn = 1 WHERE giveaway_id = ?",
+            (giveaway_id,),
+        )
+        conn.commit()
+
+    def _save_winners_announcement_message(self, giveaway_id: int, message_id: Optional[int]) -> None:
+        if message_id is None:
+            return
+        cursor.execute(
+            "UPDATE giveaways SET winners_message_id = ?, winners_announced_at = ? WHERE giveaway_id = ?",
+            (int(message_id), unix_now(), giveaway_id),
+        )
+        conn.commit()
+
+    # --------------------------------------------------------
+    # Idempotent Winner Flow
+    # --------------------------------------------------------
+    async def _choose_original_winners_once(
+        self, giveaway_id: int, desired_count: int
+    ) -> List[int]:
+        """
+        Choose original winners exactly once. If already chosen, return the existing list.
+        If not, select from entrants, record to DB, and mark winners_drawn.
+        """
+        # If any original winners exist, return them
+        if self._has_original_winners(giveaway_id):
+            return self._existing_original_winner_ids(giveaway_id)
+
+        entrants_rows = self._get_entrants(giveaway_id)
+        entrants: List[int] = []
+        for r in entrants_rows:
+            # Weighting by entries value
+            entrants.extend([r["user_id"]] * int(max(1, r["entries"])))
+
+        random.shuffle(entrants)
+
+        winners: List[int] = []
+        if entrants and desired_count > 0:
+            # sample without replacement by converting to set first to avoid same user winning twice,
+            # while still respecting weighting during shuffle
+            unique_entrants = list(dict.fromkeys(entrants))  # preserve order
+            pick = min(desired_count, len(unique_entrants))
+            winners = random.sample(unique_entrants, pick)
+
+        # Record winners (may be empty) and mark drawn
+        self._record_winners(giveaway_id=giveaway_id, winners=winners, is_reroll=False, message_id=None)
+        self._mark_winners_drawn(giveaway_id)
+
+        audit_log(
+            f"Original winners drawn for giveaway {giveaway_id}: {', '.join(map(str, winners)) if winners else 'no winners'}"
+        )
+        return winners
+
+    async def _announce_original_winners_once(
+        self,
+        guild: discord.Guild,
+        row: sqlite3.Row,
+        title: str = "🎉 Giveaway Winners",
+    ) -> Tuple[List[int], Optional[discord.Message]]:
+        """
+        Announce original winners at most once. If winners already chosen, do not pick again.
+        If an announcement message was already posted, do not post another.
+        """
+        giveaway_id = row["giveaway_id"]
+        channel_id = row["channel_id"]
+        prize = row["prize"]
+        winner_count = int(row["winner_count"])
+        host_id = row["host_id"]
+
+        # Ensure winners are chosen exactly once
+        winners = await self._choose_original_winners_once(giveaway_id, winner_count)
+
+        # If a winners message has already been posted, do not send a duplicate
+        if row["winners_message_id"]:
+            audit_log(
+                f"Skip duplicate announce for giveaway {giveaway_id}. Existing message id {row['winners_message_id']}."
             )
-        else:
-            cursor.execute(
-                "SELECT * FROM giveaway_winners WHERE giveaway_id = ? AND is_reroll = ? ORDER BY id ASC",
-                (giveaway_id, 1 if is_reroll else 0),
+            return winners, None
+
+        # Per requirement: never send duplicate messages unless a winner has not been chosen and the end time has passed.
+        # At this point winners have been chosen. Respect the rule and do not send again.
+        # If you ever want to allow a re-announce when the original message was deleted, you could relax this,
+        # but for now we explicitly avoid sending a second public message.
+        if self._has_original_winners(giveaway_id):
+            audit_log(
+                f"Original winners already exist for giveaway {giveaway_id}. Not posting a new winners message."
             )
-        return cursor.fetchall()
+            return winners, None
+
+        # This branch will only be reached if somehow winners_drawn was false when called,
+        # but _choose_original_winners_once above should always set it and record winners.
+        # Still, as a safe fallback, we post once if no winners exist at all.
+        try:
+            channel = guild.get_channel(channel_id) or await guild.fetch_channel(channel_id)
+            embed = self._winners_embed(prize, winners, host_id, title=title)
+            msg = await channel.send(embed=embed)
+            self._save_winners_announcement_message(giveaway_id, msg.id)
+
+            # DM winners
+            for uid in winners:
+                try:
+                    user = guild.get_member(uid) or await guild.fetch_member(uid)
+                    await user.send(embed=self._dm_winner_embed(guild.name, prize, host_id))
+                except Exception:
+                    pass
+
+            # DM host
+            if host_id:
+                try:
+                    host_member = guild.get_member(host_id) or await guild.fetch_member(host_id)
+                    await host_member.send(
+                        embed=self._dm_host_embed(giveaway_id, prize, winners, is_reroll=False)
+                    )
+                except Exception:
+                    pass
+
+            return winners, msg
+        except Exception as e:
+            logging.warning(f"Failed to post winners message for giveaway {giveaway_id}: {e}")
+            return winners, None
+
+    async def _announce_reroll_winners(
+        self,
+        guild: discord.Guild,
+        row: sqlite3.Row,
+        winners_to_draw: int,
+        title: str = "🎉 Giveaway Winners (reroll)",
+    ) -> Tuple[List[int], Optional[discord.Message]]:
+        """
+        Always draw and announce reroll winners. These are recorded separately (is_reroll = 1).
+        """
+        giveaway_id = row["giveaway_id"]
+        channel_id = row["channel_id"]
+        prize = row["prize"]
+        host_id = row["host_id"]
+
+        entrants = [r["user_id"] for r in self._get_entrants(giveaway_id)]
+        random.shuffle(entrants)
+        winners: List[int] = []
+        if entrants and winners_to_draw > 0:
+            pick = min(winners_to_draw, len(entrants))
+            winners = random.sample(entrants, pick)
+
+        msg: Optional[discord.Message] = None
+        try:
+            channel = guild.get_channel(channel_id) or await guild.fetch_channel(channel_id)
+            embed = self._winners_embed(prize, winners, host_id, title=title)
+            msg = await channel.send(embed=embed)
+        except Exception:
+            msg = None
+
+        # Record reroll winners
+        self._record_winners(giveaway_id=giveaway_id, winners=winners, is_reroll=True, message_id=(msg.id if msg else None))
+        audit_log(
+            f"Giveaway {giveaway_id} reroll winners: {', '.join(map(str, winners)) if winners else 'no winners'}"
+        )
+
+        # DM winners
+        for uid in winners:
+            try:
+                user = guild.get_member(uid) or await guild.fetch_member(uid)
+                await user.send(embed=self._dm_winner_embed(guild.name, prize, host_id))
+            except Exception:
+                pass
+
+        # DM host
+        if host_id:
+            try:
+                host_member = guild.get_member(host_id) or await guild.fetch_member(host_id)
+                await host_member.send(
+                    embed=self._dm_host_embed(giveaway_id, prize, winners, is_reroll=True)
+                )
+            except Exception:
+                pass
+
+        return winners, msg
 
     # --------------------------------------------------------
     # UI Builders
@@ -407,68 +608,6 @@ class Giveaways(commands.Cog):
             )
         return embed
 
-    async def _announce_winners(
-        self,
-        guild: discord.Guild,
-        channel_id: int,
-        giveaway_id: int,
-        prize: str,
-        winner_count: int,
-        host_id: Optional[int],
-        is_reroll: bool = False,
-        title: str = "🎉 Giveaway Winners",
-    ) -> Tuple[List[int], Optional[discord.Message]]:
-        entrants = [row["user_id"] for row in self._get_entrants(giveaway_id)]
-        random.shuffle(entrants)
-
-        winners: List[int] = []
-        if entrants and winner_count > 0:
-            pick = min(winner_count, len(entrants))
-            winners = random.sample(entrants, pick)
-
-        channel = guild.get_channel(channel_id) or await guild.fetch_channel(channel_id)
-
-        embed = self._winners_embed(prize, winners, host_id, title=title)
-        msg: Optional[discord.Message]
-        try:
-            msg = await channel.send(embed=embed)
-        except Exception:
-            msg = None
-
-        # Record winners in DB
-        if winners:
-            self._record_winners(
-                giveaway_id=giveaway_id,
-                winners=winners,
-                is_reroll=is_reroll,
-                message_id=(msg.id if msg else None),
-            )
-            audit_log(
-                f"Giveaway {giveaway_id} winners ({'reroll' if is_reroll else 'original'}): {', '.join(map(str, winners))}"
-            )
-
-        # Attempt to DM winners with an embed
-        for uid in winners:
-            try:
-                user = guild.get_member(uid) or await guild.fetch_member(uid)
-                await user.send(embed=self._dm_winner_embed(guild.name, prize, host_id))
-            except Exception:
-                pass
-
-        # Attempt to DM the host with the outcome
-        if host_id:
-            try:
-                host_member = guild.get_member(host_id) or await guild.fetch_member(
-                    host_id
-                )
-                await host_member.send(
-                    embed=self._dm_host_embed(giveaway_id, prize, winners, is_reroll)
-                )
-            except Exception:
-                pass
-
-        return winners, msg
-
     async def _refresh_giveaway_message(
         self,
         guild: discord.Guild,
@@ -520,38 +659,33 @@ class Giveaways(commands.Cog):
     async def _end_if_overdue(self, guild: discord.Guild, row: sqlite3.Row) -> bool:
         """
         If the giveaway has passed its end_time, mark as ended, update the message,
-        and auto-announce winners. Returns True if it was ended now.
+        and announce winners exactly once. Returns True if it was ended now.
         """
         if row["status"] != "running" or row["end_time"] > unix_now():
             return False
+        giveaway_id = row["giveaway_id"]
         try:
             # Mark ended
             cursor.execute(
                 "UPDATE giveaways SET status = 'ended' WHERE giveaway_id = ?",
-                (row["giveaway_id"],),
+                (giveaway_id,),
             )
             conn.commit()
 
             # Update original message to show ended
-            await self._refresh_giveaway_message(guild, row["giveaway_id"])
+            await self._refresh_giveaway_message(guild, giveaway_id)
 
-            # Announce winners via embed (original draw)
-            await self._announce_winners(
-                guild=guild,
-                channel_id=row["channel_id"],
-                giveaway_id=row["giveaway_id"],
-                prize=row["prize"],
-                winner_count=int(row["winner_count"]),
-                host_id=row["host_id"],
-                is_reroll=False,
-            )
+            # Announce winners once
+            # Refresh row to see latest idempotency columns
+            row = self._fetch_giveaway(giveaway_id)
+            await self._announce_original_winners_once(guild, row, title="🎉 Giveaway Winners")
             audit_log(
-                f"Auto-ended giveaway {row['giveaway_id']} in guild {row['guild_id']} and announced winners."
+                f"Auto-ended giveaway {giveaway_id} in guild {row['guild_id']} and handled winners idempotently."
             )
             return True
         except Exception as e:
             logging.warning(
-                f"Failed to auto-end overdue giveaway {row['giveaway_id']}: {e}"
+                f"Failed to auto-end overdue giveaway {giveaway_id}: {e}"
             )
             return False
 
@@ -569,18 +703,14 @@ class Giveaways(commands.Cog):
         try:
             # Ensure the original message reflects ended
             await self._refresh_giveaway_message(guild, row["giveaway_id"])
-            await self._announce_winners(
+            # Draw and announce once
+            await self._announce_original_winners_once(
                 guild=guild,
-                channel_id=row["channel_id"],
-                giveaway_id=row["giveaway_id"],
-                prize=row["prize"],
-                winner_count=int(row["winner_count"]),
-                host_id=row["host_id"],
-                is_reroll=False,
-                title="🎉 Giveaway Winners (delayed announcement)",
+                row=row,
+                title="🎉 Giveaway Winners",
             )
             audit_log(
-                f"Late-announced winners for giveaway {row['giveaway_id']} in guild {row['guild_id']}."
+                f"Late-announced winners for giveaway {row['giveaway_id']} in guild {row['guild_id']} (first and only time)."
             )
             return True
         except Exception as e:
@@ -594,7 +724,7 @@ class Giveaways(commands.Cog):
     ) -> List[int]:
         """
         Helper to mark a running giveaway as ended now, update message,
-        and announce winners. Returns list of winners.
+        and announce winners exactly once. Returns list of original winners.
         """
         giveaway_id = row["giveaway_id"]
         try:
@@ -635,15 +765,9 @@ class Giveaways(commands.Cog):
         except Exception:
             pass
 
-        winners, _ = await self._announce_winners(
-            guild=guild,
-            channel_id=row["channel_id"],
-            giveaway_id=giveaway_id,
-            prize=row["prize"],
-            winner_count=int(row["winner_count"]),
-            host_id=row["host_id"],
-            is_reroll=False,
-        )
+        # Refresh row with latest idempotency columns and announce once
+        fresh = self._fetch_giveaway(giveaway_id)
+        winners, _ = await self._announce_original_winners_once(guild, fresh, title="🎉 Giveaway Winners")
         return winners
 
     # --------------------------------------------------------
@@ -687,7 +811,7 @@ class Giveaways(commands.Cog):
         guild = interaction.guild
         assert guild is not None
 
-        # Auto-end if time has passed (and announce winners)
+        # Auto-end if time has passed (and handle winners idempotently)
         if await self._end_if_overdue(guild, row):
             try:
                 await interaction.response.send_message(
@@ -959,8 +1083,8 @@ class Giveaways(commands.Cog):
         cursor.execute(
             """
             INSERT INTO giveaways
-                (guild_id, channel_id, prize, description, host_id, start_time, end_time, winner_count, status, required_role_id, max_entries_per_user, entry_count)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, 0)
+                (guild_id, channel_id, prize, description, host_id, start_time, end_time, winner_count, status, required_role_id, max_entries_per_user, entry_count, winners_drawn, winners_message_id, winners_announced_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, 0, 0, NULL, NULL)
             """,
             (
                 guild.id,
@@ -1174,20 +1298,12 @@ class Giveaways(commands.Cog):
             )
             return
 
-        channel_id = row["channel_id"]
-        prize = row["prize"]
-        winner_count = (
-            int(winners) if winners and winners > 0 else int(row["winner_count"])
-        )
-
-        winners_list, _ = await self._announce_winners(
+        winner_count = int(winners) if winners and winners > 0 else int(row["winner_count"])
+        winners_list, _ = await self._announce_reroll_winners(
             guild,
-            channel_id,
-            giveaway_id,
-            prize,
+            row,
             winner_count,
-            host_id=row["host_id"],
-            is_reroll=True,
+            title="🎉 Giveaway Winners (reroll)",
         )
         await interaction.followup.send(
             embed=self._embed(
@@ -1391,6 +1507,9 @@ class Giveaways(commands.Cog):
         required_role_id = row["required_role_id"]
         max_entries = int(row["max_entries_per_user"])
         entry_count = self._count_entries(giveaway_id)
+        winners_drawn = int(row["winners_drawn"])
+        winners_msg_id = row["winners_message_id"]
+        winners_announced_at = row["winners_announced_at"]
 
         message_url = None
         try:
@@ -1444,6 +1563,12 @@ class Giveaways(commands.Cog):
                 value=fmt_winners(reroll_winners),
                 inline=False,
             )
+
+        # Idempotency state snapshot
+        drawn_state = "Yes" if winners_drawn else "No"
+        announced_state = f"Yes (message id {winners_msg_id}, <t:{winners_announced_at}:R>)" if winners_msg_id else "No"
+        embed.add_field(name="Winners Drawn", value=drawn_state, inline=True)
+        embed.add_field(name="Original Announcement Posted", value=announced_state, inline=True)
 
         await interaction.response.send_message(embed=embed)
         audit_log(f"Viewed info for giveaway {giveaway_id} in guild {guild.id}.")
@@ -1545,7 +1670,7 @@ class Giveaways(commands.Cog):
     # --------------------------------------------------------
     # Ready: register persistent views for active giveaways and sweep overdue
     # --------------------------------------------------------
-    @commands.Cog.listener()
+    @commands.Cog.listener())
     async def on_ready(self) -> None:
         try:
             # Re-register persistent views for all running giveaways so buttons continue to work after restarts
@@ -1554,7 +1679,7 @@ class Giveaways(commands.Cog):
             for gid in ids:
                 self.bot.add_view(GiveawayEntryView(self, gid))
 
-            # Sweep any overdue giveaways and auto-end + announce
+            # Sweep any overdue giveaways and auto-end + announce once
             now = unix_now()
             cursor.execute(
                 "SELECT * FROM giveaways WHERE status = 'running' AND end_time <= ?",
@@ -1570,7 +1695,7 @@ class Giveaways(commands.Cog):
                         continue
                 await self._end_if_overdue(guild, row)
 
-            # Also handle giveaways already ended but never announced
+            # Handle giveaways already ended but never announced
             cursor.execute("SELECT * FROM giveaways WHERE status = 'ended'")
             ended = cursor.fetchall()
             for row in ended:
