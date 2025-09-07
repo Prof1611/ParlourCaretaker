@@ -433,6 +433,7 @@ class StickyMessages(commands.Cog):
         perms = channel.permissions_for(channel.guild.me)
         can_manage = perms.manage_messages
         # 1) Bulk purge if possible
+
         if perms.send_messages and can_manage:
 
             def check(m: discord.Message) -> bool:
@@ -500,8 +501,6 @@ class StickyMessages(commands.Cog):
                 self.delete_sticky_from_db(channel.id)
             except Exception:
                 # If the row does not exist yet, ignore
-                pass
-
             # Post the new sticky
             sent = await self._send_sticky(channel, new_data["content"], new_data["format"], new_data["color"])
 
@@ -597,7 +596,7 @@ class StickyMessages(commands.Cog):
                 except Exception:
                     pass
 
-    @commands.Cog.listener()
+    @commands.Cog.listener())
     async def on_resumed(self):
         logging.info("Bot resumed. Ensuring stickies exist.")
         audit_log("Bot resumed: Ensuring stickies exist.")
@@ -709,17 +708,19 @@ class StickyMessages(commands.Cog):
     # New command: liststickies
     # -----------------------
 
-    def _new_list_embed(self, guild: discord.Guild) -> discord.Embed:
-        return discord.Embed(
-            title=f"Sticky Messages in {guild.name}",
-            description="All configured stickies in this server.",
-            color=discord.Color.blurple(),
-        )
-
-    def _clean_preview(self, text: str, limit: int = 300) -> str:
-        # Strip zero width markers and collapse whitespace for a readable preview
+    def _clean_preview_inline(self, text: str, limit: int = 350) -> str:
+        """Strip zero width markers and collapse whitespace for inline preview."""
         clean = ZERO_WIDTH_RUN.sub("", text or "")
         clean = " ".join(clean.split())
+        if len(clean) > limit:
+            clean = clean[: limit - 1] + "…"
+        return clean
+
+    def _clean_preview_block(self, text: str, limit: int = 950) -> str:
+        """Clean preview for code block, preserving line breaks, trimming to stay under field limits."""
+        clean = ZERO_WIDTH_RUN.sub("", text or "")
+        # Avoid breaking code fences inside embeds
+        clean = clean.replace("```", "ˋˋˋ")
         if len(clean) > limit:
             clean = clean[: limit - 1] + "…"
         return clean
@@ -727,12 +728,11 @@ class StickyMessages(commands.Cog):
     async def _build_list_pages_for_guild(
         self, guild: discord.Guild, requester: discord.Member
     ) -> List[discord.Embed]:
+        """Build one page per sticky with clear fields and a code-block preview."""
         pages: List[discord.Embed] = []
-        current = self._new_list_embed(guild)
-        fields_on_page = 0
 
         # Order by channel name for stable output
-        items = []
+        items: List[tuple[GuildTextLike, Dict]] = []
         for ch_id, data in self.stickies.items():
             channel = self.bot.get_channel(int(ch_id))
             if isinstance(channel, (discord.TextChannel, discord.Thread)) and channel.guild.id == guild.id:
@@ -745,25 +745,30 @@ class StickyMessages(commands.Cog):
                 description="There are no stickies configured in this server.",
                 color=discord.Color.red(),
             )
+            empty.set_footer(text="Use /setsticky in a channel to create one.")
             return [empty]
 
-        for channel, data in items:
+        total = len(items)
+
+        for idx, (channel, data) in enumerate(items, start=1):
             fmt = data.get("format", "normal")
             colour_value = int(data.get("color", 0) or 0)
-            colour_hex = f"#{colour_value:06X}" if fmt == "embed" and colour_value else "N/A"
             msg_id = data.get("message_id")
-            preview = self._clean_preview(data.get("content", ""), limit=350)
+            preview_inline = self._clean_preview_inline(data.get("content", ""), limit=350)
+            preview_block = self._clean_preview_block(data.get("content", ""), limit=950)
 
-            # Try to verify whether the tracked message still exists
+            # Try to verify whether the tracked message still exists and capture timestamp
             existence = "Unknown"
             jump = None
+            created_ts_unix: Optional[int] = None
             try:
                 if msg_id:
-                    # Prefer fetch to confirm existence. If it fails with 403 due to perms, treat as unknown.
                     try:
                         msg = await channel.fetch_message(msg_id)  # type: ignore[arg-type]
                         jump = msg.jump_url
                         existence = "Present"
+                        # created_at is aware datetime; Discord timestamp markdown will render nicely
+                        created_ts_unix = int(msg.created_at.timestamp())
                     except discord.NotFound:
                         existence = "Missing"
                         jump = f"https://discord.com/channels/{guild.id}/{channel.id}/{msg_id}"
@@ -777,47 +782,55 @@ class StickyMessages(commands.Cog):
                 existence = "Unknown"
                 jump = f"https://discord.com/channels/{guild.id}/{channel.id}/{msg_id}" if msg_id else None
 
-            # Field name and value
-            name = f"{channel.mention if hasattr(channel, 'mention') else f'#{channel.id}'}"
-            value_lines = [
+            # Title and colour: show the embed colour if the sticky is embed type and has a colour
+            embed_colour = discord.Color(colour_value) if fmt == "embed" and colour_value else discord.Color.blurple()
+            emb = discord.Embed(
+                title=f"Sticky • {channel.mention}",
+                description="Details for this channel’s sticky.",
+                color=embed_colour,
+            )
+
+            # Channel details
+            channel_type = "Thread" if isinstance(channel, discord.Thread) else "Text Channel"
+            parent_line = f"\n• **Parent:** {channel.parent.mention}" if isinstance(channel, discord.Thread) and channel.parent else ""
+
+            colour_hex = f"#{colour_value:06X}" if fmt == "embed" and colour_value else "N/A"
+            msg_id_line = f"`{msg_id}`" if msg_id else "`None recorded`"
+            link_line = jump if jump else "`N/A`"
+            last_posted_line = f"<t:{created_ts_unix}:R>" if created_ts_unix else "`Unknown`"
+
+            details_lines = [
                 f"• **Channel ID:** `{channel.id}`",
+                f"• **Type:** {channel_type}{parent_line}",
                 f"• **Format:** `{fmt}`",
                 f"• **Colour:** `{colour_hex}`",
-                f"• **Message ID:** `{msg_id}`" if msg_id else "• **Message ID:** `None recorded`",
-                f"• **Link:** {jump}" if jump else "• **Link:** `N/A`",
+                f"• **Message ID:** {msg_id_line}",
+                f"• **Link:** {link_line}",
                 f"• **Status:** {existence}",
-                "",
-                f"**Preview:** {preview}" if preview else "**Preview:** _empty_",
+                f"• **Last posted:** {last_posted_line}",
             ]
-            field_value = "\n".join(value_lines)
-            # Respect per-field and total caps
-            field_name = name[:EMBED_FIELD_NAME_LIMIT]
-            if (
-                fields_on_page >= EMBED_MAX_FIELDS
-                or (embed_length(current) + len(field_name) + len(field_value)) > EMBED_TOTAL_CHAR_LIMIT
-            ):
-                pages.append(current)
-                current = self._new_list_embed(guild)
-                fields_on_page = 0
-            current.add_field(name=field_name, value=field_value[:EMBED_FIELD_VALUE_LIMIT], inline=False)
-            fields_on_page += 1
+            emb.add_field(name="Details", value="\n".join(details_lines), inline=False)
 
-        if fields_on_page > 0 or not pages:
-            pages.append(current)
+            # Preview field in a code block for readability
+            if preview_block:
+                emb.add_field(name="Preview", value=f"```{preview_block}```", inline=False)
+            else:
+                emb.add_field(name="Preview", value="_empty_", inline=False)
 
-        total = len(pages)
-        for idx, emb in enumerate(pages, start=1):
-            emb.set_footer(text=f"Page {idx} of {total}")
+            # Helpful footer with index
+            emb.set_footer(text=f"Sticky {idx} of {total} • Use buttons to navigate • /removesticky to delete")
+
+            pages.append(emb)
 
         return pages
 
     @app_commands.command(
         name="liststickies",
-        description="List all current stickies across this server with channel, status, and a content preview.",
+        description="List all current stickies across this server. Each sticky appears on its own page.",
     )
     @app_commands.default_permissions(manage_messages=True)
     async def list_stickies(self, interaction: discord.Interaction):
-        """Paginated list of all stickies in the invoking server, using button pagination."""
+        """Paginated list of all stickies in the invoking server, using button pagination (one per page)."""
         if interaction.guild is None:
             err = make_embed("Guild Only", "This command can only be used in a server.", discord.Color.red())
             return await interaction.response.send_message(embed=err, ephemeral=True)
