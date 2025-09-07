@@ -579,7 +579,7 @@ class StickyMessages(commands.Cog):
     # Events
     # -----------------------
 
-    @commands.Cog.listener())
+    @commands.Cog.listener()
     async def on_ready(self):
         logging.info("\033[96mSticky\033[0m cog synced successfully.")
         audit_log("Sticky cog synced successfully.")
