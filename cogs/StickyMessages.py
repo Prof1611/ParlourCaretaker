@@ -596,7 +596,7 @@ class StickyMessages(commands.Cog):
                 except Exception:
                     pass
 
-    @commands.Cog.listener())
+    @commands.Cog.listener()
     async def on_resumed(self):
         logging.info("Bot resumed. Ensuring stickies exist.")
         audit_log("Bot resumed: Ensuring stickies exist.")
