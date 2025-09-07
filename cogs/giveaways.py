@@ -98,7 +98,9 @@ def _ensure_schema() -> None:
     cols = _column_names("giveaways")
 
     if "winners_drawn" not in cols:
-        cursor.execute("ALTER TABLE giveaways ADD COLUMN winners_drawn INTEGER NOT NULL DEFAULT 0")
+        cursor.execute(
+            "ALTER TABLE giveaways ADD COLUMN winners_drawn INTEGER NOT NULL DEFAULT 0"
+        )
     if "winners_message_id" not in cols:
         cursor.execute("ALTER TABLE giveaways ADD COLUMN winners_message_id INTEGER")
     if "winners_announced_at" not in cols:
@@ -106,8 +108,12 @@ def _ensure_schema() -> None:
 
     # Normalise any NULLs that may exist after adding columns
     cursor.execute("UPDATE giveaways SET winners_drawn = COALESCE(winners_drawn, 0)")
-    cursor.execute("UPDATE giveaways SET winners_message_id = NULL WHERE winners_message_id IS NOT NULL AND CAST(winners_message_id AS TEXT) = ''")
-    cursor.execute("UPDATE giveaways SET winners_announced_at = NULL WHERE winners_announced_at IS NOT NULL AND CAST(winners_announced_at AS TEXT) = ''")
+    cursor.execute(
+        "UPDATE giveaways SET winners_message_id = NULL WHERE winners_message_id IS NOT NULL AND CAST(winners_message_id AS TEXT) = ''"
+    )
+    cursor.execute(
+        "UPDATE giveaways SET winners_announced_at = NULL WHERE winners_announced_at IS NOT NULL AND CAST(winners_announced_at AS TEXT) = ''"
+    )
     conn.commit()
 
 
@@ -383,7 +389,9 @@ class Giveaways(commands.Cog):
         )
         conn.commit()
 
-    def _save_winners_announcement_message(self, giveaway_id: int, message_id: Optional[int]) -> None:
+    def _save_winners_announcement_message(
+        self, giveaway_id: int, message_id: Optional[int]
+    ) -> None:
         if message_id is None:
             return
         cursor.execute(
@@ -423,7 +431,9 @@ class Giveaways(commands.Cog):
             winners = random.sample(unique_entrants, pick)
 
         # Record winners (may be empty) and mark drawn
-        self._record_winners(giveaway_id=giveaway_id, winners=winners, is_reroll=False, message_id=None)
+        self._record_winners(
+            giveaway_id=giveaway_id, winners=winners, is_reroll=False, message_id=None
+        )
         self._mark_winners_drawn(giveaway_id)
 
         audit_log(
@@ -471,7 +481,9 @@ class Giveaways(commands.Cog):
         # but _choose_original_winners_once above should always set it and record winners.
         # Still, as a safe fallback, we post once if no winners exist at all.
         try:
-            channel = guild.get_channel(channel_id) or await guild.fetch_channel(channel_id)
+            channel = guild.get_channel(channel_id) or await guild.fetch_channel(
+                channel_id
+            )
             embed = self._winners_embed(prize, winners, host_id, title=title)
             msg = await channel.send(embed=embed)
             self._save_winners_announcement_message(giveaway_id, msg.id)
@@ -480,23 +492,31 @@ class Giveaways(commands.Cog):
             for uid in winners:
                 try:
                     user = guild.get_member(uid) or await guild.fetch_member(uid)
-                    await user.send(embed=self._dm_winner_embed(guild.name, prize, host_id))
+                    await user.send(
+                        embed=self._dm_winner_embed(guild.name, prize, host_id)
+                    )
                 except Exception:
                     pass
 
             # DM host
             if host_id:
                 try:
-                    host_member = guild.get_member(host_id) or await guild.fetch_member(host_id)
+                    host_member = guild.get_member(host_id) or await guild.fetch_member(
+                        host_id
+                    )
                     await host_member.send(
-                        embed=self._dm_host_embed(giveaway_id, prize, winners, is_reroll=False)
+                        embed=self._dm_host_embed(
+                            giveaway_id, prize, winners, is_reroll=False
+                        )
                     )
                 except Exception:
                     pass
 
             return winners, msg
         except Exception as e:
-            logging.warning(f"Failed to post winners message for giveaway {giveaway_id}: {e}")
+            logging.warning(
+                f"Failed to post winners message for giveaway {giveaway_id}: {e}"
+            )
             return winners, None
 
     async def _announce_reroll_winners(
@@ -523,14 +543,21 @@ class Giveaways(commands.Cog):
 
         msg: Optional[discord.Message] = None
         try:
-            channel = guild.get_channel(channel_id) or await guild.fetch_channel(channel_id)
+            channel = guild.get_channel(channel_id) or await guild.fetch_channel(
+                channel_id
+            )
             embed = self._winners_embed(prize, winners, host_id, title=title)
             msg = await channel.send(embed=embed)
         except Exception:
             msg = None
 
         # Record reroll winners
-        self._record_winners(giveaway_id=giveaway_id, winners=winners, is_reroll=True, message_id=(msg.id if msg else None))
+        self._record_winners(
+            giveaway_id=giveaway_id,
+            winners=winners,
+            is_reroll=True,
+            message_id=(msg.id if msg else None),
+        )
         audit_log(
             f"Giveaway {giveaway_id} reroll winners: {', '.join(map(str, winners)) if winners else 'no winners'}"
         )
@@ -546,9 +573,13 @@ class Giveaways(commands.Cog):
         # DM host
         if host_id:
             try:
-                host_member = guild.get_member(host_id) or await guild.fetch_member(host_id)
+                host_member = guild.get_member(host_id) or await guild.fetch_member(
+                    host_id
+                )
                 await host_member.send(
-                    embed=self._dm_host_embed(giveaway_id, prize, winners, is_reroll=True)
+                    embed=self._dm_host_embed(
+                        giveaway_id, prize, winners, is_reroll=True
+                    )
                 )
             except Exception:
                 pass
@@ -678,15 +709,15 @@ class Giveaways(commands.Cog):
             # Announce winners once
             # Refresh row to see latest idempotency columns
             row = self._fetch_giveaway(giveaway_id)
-            await self._announce_original_winners_once(guild, row, title="🎉 Giveaway Winners")
+            await self._announce_original_winners_once(
+                guild, row, title="🎉 Giveaway Winners"
+            )
             audit_log(
                 f"Auto-ended giveaway {giveaway_id} in guild {row['guild_id']} and handled winners idempotently."
             )
             return True
         except Exception as e:
-            logging.warning(
-                f"Failed to auto-end overdue giveaway {giveaway_id}: {e}"
-            )
+            logging.warning(f"Failed to auto-end overdue giveaway {giveaway_id}: {e}")
             return False
 
     async def _announce_if_missing(
@@ -767,7 +798,9 @@ class Giveaways(commands.Cog):
 
         # Refresh row with latest idempotency columns and announce once
         fresh = self._fetch_giveaway(giveaway_id)
-        winners, _ = await self._announce_original_winners_once(guild, fresh, title="🎉 Giveaway Winners")
+        winners, _ = await self._announce_original_winners_once(
+            guild, fresh, title="🎉 Giveaway Winners"
+        )
         return winners
 
     # --------------------------------------------------------
@@ -1298,7 +1331,9 @@ class Giveaways(commands.Cog):
             )
             return
 
-        winner_count = int(winners) if winners and winners > 0 else int(row["winner_count"])
+        winner_count = (
+            int(winners) if winners and winners > 0 else int(row["winner_count"])
+        )
         winners_list, _ = await self._announce_reroll_winners(
             guild,
             row,
@@ -1566,9 +1601,15 @@ class Giveaways(commands.Cog):
 
         # Idempotency state snapshot
         drawn_state = "Yes" if winners_drawn else "No"
-        announced_state = f"Yes (message id {winners_msg_id}, <t:{winners_announced_at}:R>)" if winners_msg_id else "No"
+        announced_state = (
+            f"Yes (message id {winners_msg_id}, <t:{winners_announced_at}:R>)"
+            if winners_msg_id
+            else "No"
+        )
         embed.add_field(name="Winners Drawn", value=drawn_state, inline=True)
-        embed.add_field(name="Original Announcement Posted", value=announced_state, inline=True)
+        embed.add_field(
+            name="Original Announcement Posted", value=announced_state, inline=True
+        )
 
         await interaction.response.send_message(embed=embed)
         audit_log(f"Viewed info for giveaway {giveaway_id} in guild {guild.id}.")
@@ -1670,7 +1711,7 @@ class Giveaways(commands.Cog):
     # --------------------------------------------------------
     # Ready: register persistent views for active giveaways and sweep overdue
     # --------------------------------------------------------
-    @commands.Cog.listener())
+    @commands.Cog.listener()
     async def on_ready(self) -> None:
         try:
             # Re-register persistent views for all running giveaways so buttons continue to work after restarts
