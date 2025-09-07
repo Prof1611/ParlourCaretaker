@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Sequence
 import discord
 import random
 import sqlite3
@@ -62,6 +62,21 @@ cursor.execute(
         user_id INTEGER NOT NULL,
         reason TEXT,
         PRIMARY KEY (guild_id, user_id)
+    )
+    """
+)
+
+# Winners table (persistent record of who won)
+cursor.execute(
+    """
+    CREATE TABLE IF NOT EXISTS giveaway_winners (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        giveaway_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        announced_at INTEGER NOT NULL,
+        is_reroll INTEGER NOT NULL DEFAULT 0,
+        message_id INTEGER,
+        FOREIGN KEY (giveaway_id) REFERENCES giveaways(giveaway_id) ON DELETE CASCADE
     )
     """
 )
@@ -215,6 +230,52 @@ class Giveaways(commands.Cog):
     def _embed(title: str, description: str, colour: discord.Color) -> discord.Embed:
         return discord.Embed(title=title, description=description, color=colour)
 
+    @staticmethod
+    def _winners_embed(
+        prize: str,
+        winners: Sequence[int],
+        host_id: Optional[int],
+        title: str = "🎉 Giveaway Winners",
+    ) -> discord.Embed:
+        if winners:
+            mentions = " ".join(f"<@{uid}>" for uid in winners)
+            contact_line = (
+                f"\n\nPlease contact <@{host_id}> to collect your prize."
+                if host_id
+                else ""
+            )
+            desc = f"Congratulations {mentions}!\n\nYou won **{prize}**.{contact_line}"
+        else:
+            desc = "No valid entries. No winners could be selected."
+        return discord.Embed(title=title, description=desc, color=discord.Color.gold())
+
+    @staticmethod
+    def _dm_winner_embed(
+        guild_name: str, prize: str, host_id: Optional[int]
+    ) -> discord.Embed:
+        contact_line = (
+            f"\n\nPlease contact <@{host_id}> to collect your prize." if host_id else ""
+        )
+        return discord.Embed(
+            title="🎉 You won a giveaway!",
+            description=f"You won **{prize}** in **{guild_name}**.{contact_line}",
+            color=discord.Color.gold(),
+        )
+
+    @staticmethod
+    def _dm_host_embed(
+        giveaway_id: int, prize: str, winners: Sequence[int], is_reroll: bool
+    ) -> discord.Embed:
+        if winners:
+            mentions = " ".join(f"<@{uid}>" for uid in winners)
+            action = "Reroll winners" if is_reroll else "Winners"
+            desc = f"{action} for giveaway `{giveaway_id}` (**{prize}**): {mentions}"
+        else:
+            desc = f"No valid entries were available for giveaway `{giveaway_id}` (**{prize}**)."
+        return discord.Embed(
+            title="Giveaway Result", description=desc, color=discord.Color.gold()
+        )
+
     # --------------------------------------------------------
     # DB Helpers
     # --------------------------------------------------------
@@ -251,6 +312,47 @@ class Giveaways(commands.Cog):
             (guild_id, user_id),
         )
         return cursor.fetchone() is not None
+
+    def _record_winners(
+        self,
+        giveaway_id: int,
+        winners: Sequence[int],
+        is_reroll: bool,
+        message_id: Optional[int],
+    ) -> None:
+        if not winners:
+            return
+        ts = unix_now()
+        rows = [
+            (giveaway_id, uid, ts, 1 if is_reroll else 0, message_id) for uid in winners
+        ]
+        cursor.executemany(
+            "INSERT INTO giveaway_winners (giveaway_id, user_id, announced_at, is_reroll, message_id) VALUES (?, ?, ?, ?, ?)",
+            rows,
+        )
+        conn.commit()
+
+    def _has_original_winners(self, giveaway_id: int) -> bool:
+        cursor.execute(
+            "SELECT 1 FROM giveaway_winners WHERE giveaway_id = ? AND is_reroll = 0 LIMIT 1",
+            (giveaway_id,),
+        )
+        return cursor.fetchone() is not None
+
+    def _fetch_winners(
+        self, giveaway_id: int, is_reroll: Optional[bool] = None
+    ) -> List[sqlite3.Row]:
+        if is_reroll is None:
+            cursor.execute(
+                "SELECT * FROM giveaway_winners WHERE giveaway_id = ? ORDER BY id ASC",
+                (giveaway_id,),
+            )
+        else:
+            cursor.execute(
+                "SELECT * FROM giveaway_winners WHERE giveaway_id = ? AND is_reroll = ? ORDER BY id ASC",
+                (giveaway_id, 1 if is_reroll else 0),
+            )
+        return cursor.fetchall()
 
     # --------------------------------------------------------
     # UI Builders
@@ -307,12 +409,14 @@ class Giveaways(commands.Cog):
 
     async def _announce_winners(
         self,
-        interaction: Optional[discord.Interaction],
         guild: discord.Guild,
         channel_id: int,
         giveaway_id: int,
         prize: str,
         winner_count: int,
+        host_id: Optional[int],
+        is_reroll: bool = False,
+        title: str = "🎉 Giveaway Winners",
     ) -> Tuple[List[int], Optional[discord.Message]]:
         entrants = [row["user_id"] for row in self._get_entrants(giveaway_id)]
         random.shuffle(entrants)
@@ -323,23 +427,42 @@ class Giveaways(commands.Cog):
             winners = random.sample(entrants, pick)
 
         channel = guild.get_channel(channel_id) or await guild.fetch_channel(channel_id)
-        if winners:
-            mentions = " ".join(f"<@{uid}>" for uid in winners)
-            content = f"🎉 Congratulations {mentions}! You won **{prize}**."
-        else:
-            content = "No valid entries. No winners could be selected."
 
+        embed = self._winners_embed(prize, winners, host_id, title=title)
+        msg: Optional[discord.Message]
         try:
-            msg = await channel.send(content)
+            msg = await channel.send(embed=embed)
         except Exception:
             msg = None
 
-        # Attempt to DM winners
+        # Record winners in DB
+        if winners:
+            self._record_winners(
+                giveaway_id=giveaway_id,
+                winners=winners,
+                is_reroll=is_reroll,
+                message_id=(msg.id if msg else None),
+            )
+            audit_log(
+                f"Giveaway {giveaway_id} winners ({'reroll' if is_reroll else 'original'}): {', '.join(map(str, winners))}"
+            )
+
+        # Attempt to DM winners with an embed
         for uid in winners:
-            user = guild.get_member(uid) or await guild.fetch_member(uid)
             try:
-                await user.send(
-                    f"🎉 You won **{prize}** in {guild.name}. Please contact the host to claim."
+                user = guild.get_member(uid) or await guild.fetch_member(uid)
+                await user.send(embed=self._dm_winner_embed(guild.name, prize, host_id))
+            except Exception:
+                pass
+
+        # Attempt to DM the host with the outcome
+        if host_id:
+            try:
+                host_member = guild.get_member(host_id) or await guild.fetch_member(
+                    host_id
+                )
+                await host_member.send(
+                    embed=self._dm_host_embed(giveaway_id, prize, winners, is_reroll)
                 )
             except Exception:
                 pass
@@ -396,24 +519,132 @@ class Giveaways(commands.Cog):
 
     async def _end_if_overdue(self, guild: discord.Guild, row: sqlite3.Row) -> bool:
         """
-        If the giveaway has passed its end_time, mark as ended and update the message.
-        Returns True if it was ended now.
+        If the giveaway has passed its end_time, mark as ended, update the message,
+        and auto-announce winners. Returns True if it was ended now.
         """
         if row["status"] != "running" or row["end_time"] > unix_now():
             return False
         try:
+            # Mark ended
             cursor.execute(
                 "UPDATE giveaways SET status = 'ended' WHERE giveaway_id = ?",
                 (row["giveaway_id"],),
             )
             conn.commit()
+
+            # Update original message to show ended
             await self._refresh_giveaway_message(guild, row["giveaway_id"])
+
+            # Announce winners via embed (original draw)
+            await self._announce_winners(
+                guild=guild,
+                channel_id=row["channel_id"],
+                giveaway_id=row["giveaway_id"],
+                prize=row["prize"],
+                winner_count=int(row["winner_count"]),
+                host_id=row["host_id"],
+                is_reroll=False,
+            )
+            audit_log(
+                f"Auto-ended giveaway {row['giveaway_id']} in guild {row['guild_id']} and announced winners."
+            )
             return True
         except Exception as e:
             logging.warning(
                 f"Failed to auto-end overdue giveaway {row['giveaway_id']}: {e}"
             )
             return False
+
+    async def _announce_if_missing(
+        self, guild: discord.Guild, row: sqlite3.Row
+    ) -> bool:
+        """
+        If a giveaway is already ended but has no original winners recorded,
+        announce original winners now. Returns True if announced.
+        """
+        if row["status"] != "ended":
+            return False
+        if self._has_original_winners(row["giveaway_id"]):
+            return False
+        try:
+            # Ensure the original message reflects ended
+            await self._refresh_giveaway_message(guild, row["giveaway_id"])
+            await self._announce_winners(
+                guild=guild,
+                channel_id=row["channel_id"],
+                giveaway_id=row["giveaway_id"],
+                prize=row["prize"],
+                winner_count=int(row["winner_count"]),
+                host_id=row["host_id"],
+                is_reroll=False,
+                title="🎉 Giveaway Winners (delayed announcement)",
+            )
+            audit_log(
+                f"Late-announced winners for giveaway {row['giveaway_id']} in guild {row['guild_id']}."
+            )
+            return True
+        except Exception as e:
+            logging.warning(
+                f"Failed to late-announce winners for giveaway {row['giveaway_id']}: {e}"
+            )
+            return False
+
+    async def _end_and_announce_now(
+        self, guild: discord.Guild, row: sqlite3.Row
+    ) -> List[int]:
+        """
+        Helper to mark a running giveaway as ended now, update message,
+        and announce winners. Returns list of winners.
+        """
+        giveaway_id = row["giveaway_id"]
+        try:
+            cursor.execute(
+                "UPDATE giveaways SET status = 'ended' WHERE giveaway_id = ?",
+                (giveaway_id,),
+            )
+            conn.commit()
+        except Exception:
+            pass
+
+        # Update original message embed to show ended (using 'now' as end_ts for display)
+        try:
+            channel = guild.get_channel(row["channel_id"]) or await guild.fetch_channel(
+                row["channel_id"]
+            )
+            msg = None
+            if row["message_id"]:
+                try:
+                    msg = await channel.fetch_message(row["message_id"])
+                except Exception:
+                    msg = None
+
+            embed = self._build_giveaway_embed(
+                guild=guild,
+                prize=row["prize"],
+                description=row["description"],
+                host=guild.get_member(row["host_id"]),
+                end_ts=unix_now(),
+                winner_count=int(row["winner_count"]),
+                required_role_id=row["required_role_id"],
+                entry_count=self._count_entries(giveaway_id),
+                status="ended",
+                message_url=(msg.jump_url if msg else None),
+            )
+            if msg:
+                await msg.edit(embed=embed, view=None)
+        except Exception:
+            pass
+
+        winners, _ = await self._announce_winners(
+            guild=guild,
+            channel_id=row["channel_id"],
+            giveaway_id=giveaway_id,
+            prize=row["prize"],
+            winner_count=int(row["winner_count"]),
+            host_id=row["host_id"],
+            is_reroll=False,
+        )
+        return winners
 
     # --------------------------------------------------------
     # Component handling for persistent buttons
@@ -456,7 +687,7 @@ class Giveaways(commands.Cog):
         guild = interaction.guild
         assert guild is not None
 
-        # Auto-end if time has passed
+        # Auto-end if time has passed (and announce winners)
         if await self._end_if_overdue(guild, row):
             try:
                 await interaction.response.send_message(
@@ -748,10 +979,6 @@ class Giveaways(commands.Cog):
         giveaway_id = cursor.lastrowid
 
         # Build embed and view
-        content_ping = None
-        if self.ping_role_id:
-            content_ping = f"<@&{self.ping_role_id}>"
-
         embed = self._build_giveaway_embed(
             guild=guild,
             prize=prize,
@@ -766,6 +993,8 @@ class Giveaways(commands.Cog):
         view = GiveawayEntryView(self, giveaway_id)
 
         try:
+            # Role ping (plaintext) allowed alongside embed
+            content_ping = f"<@&{self.ping_role_id}>" if self.ping_role_id else None
             message = await target_channel.send(
                 content=content_ping, embed=embed, view=view
             )
@@ -870,44 +1099,7 @@ class Giveaways(commands.Cog):
             )
             return
 
-        # Mark as ended
-        cursor.execute(
-            "UPDATE giveaways SET status = 'ended' WHERE giveaway_id = ?",
-            (giveaway_id,),
-        )
-        conn.commit()
-
-        channel_id = row["channel_id"]
-        message_id = row["message_id"]
-        prize = row["prize"]
-        winner_count = int(row["winner_count"])
-        end_ts = unix_now()
-
-        # Update original message embed to show ended
-        try:
-            channel = guild.get_channel(channel_id) or await guild.fetch_channel(
-                channel_id
-            )
-            msg = await channel.fetch_message(message_id)
-            embed = self._build_giveaway_embed(
-                guild=guild,
-                prize=prize,
-                description=row["description"],
-                host=guild.get_member(row["host_id"]),
-                end_ts=end_ts,
-                winner_count=winner_count,
-                required_role_id=row["required_role_id"],
-                entry_count=self._count_entries(giveaway_id),
-                status="ended",
-                message_url=msg.jump_url,
-            )
-            await msg.edit(embed=embed, view=None)
-        except Exception:
-            pass
-
-        winners, _ = await self._announce_winners(
-            interaction, guild, channel_id, giveaway_id, prize, winner_count
-        )
+        winners = await self._end_and_announce_now(guild, row)
 
         await interaction.followup.send(
             embed=self._embed(
@@ -989,7 +1181,13 @@ class Giveaways(commands.Cog):
         )
 
         winners_list, _ = await self._announce_winners(
-            interaction, guild, channel_id, giveaway_id, prize, winner_count
+            guild,
+            channel_id,
+            giveaway_id,
+            prize,
+            winner_count,
+            host_id=row["host_id"],
+            is_reroll=True,
         )
         await interaction.followup.send(
             embed=self._embed(
@@ -1220,6 +1418,33 @@ class Giveaways(commands.Cog):
             name="Max Entries Per User", value=str(max_entries), inline=True
         )
         embed.add_field(name="ID", value=str(giveaway_id), inline=True)
+
+        # Winner details (original + rerolls)
+        orig_winners = self._fetch_winners(giveaway_id, is_reroll=False)
+        reroll_winners = self._fetch_winners(giveaway_id, is_reroll=True)
+
+        def fmt_winners(rows: List[sqlite3.Row]) -> str:
+            if not rows:
+                return "None recorded"
+            parts = []
+            for r in rows:
+                uid = r["user_id"]
+                ts = r["announced_at"]
+                parts.append(f"<@{uid}> <t:{ts}:R>")
+            return "\n".join(parts)
+
+        embed.add_field(
+            name="Original Winners",
+            value=fmt_winners(orig_winners),
+            inline=False,
+        )
+        if reroll_winners:
+            embed.add_field(
+                name="Reroll Winners",
+                value=fmt_winners(reroll_winners),
+                inline=False,
+            )
+
         await interaction.response.send_message(embed=embed)
         audit_log(f"Viewed info for giveaway {giveaway_id} in guild {guild.id}.")
 
@@ -1318,7 +1543,7 @@ class Giveaways(commands.Cog):
                 break
 
     # --------------------------------------------------------
-    # Ready: register persistent views for active giveaways
+    # Ready: register persistent views for active giveaways and sweep overdue
     # --------------------------------------------------------
     @commands.Cog.listener()
     async def on_ready(self) -> None:
@@ -1328,11 +1553,45 @@ class Giveaways(commands.Cog):
             ids = [row["giveaway_id"] for row in cursor.fetchall()]
             for gid in ids:
                 self.bot.add_view(GiveawayEntryView(self, gid))
-            logging.info(
-                "\033[96mGiveaways\033[0m cog synced. Persistent views restored for %d giveaways.",
-                len(ids),
+
+            # Sweep any overdue giveaways and auto-end + announce
+            now = unix_now()
+            cursor.execute(
+                "SELECT * FROM giveaways WHERE status = 'running' AND end_time <= ?",
+                (now,),
             )
-            audit_log(f"Giveaways cog ready. Restored {len(ids)} persistent views.")
+            overdue = cursor.fetchall()
+            for row in overdue:
+                guild = self.bot.get_guild(row["guild_id"])
+                if guild is None:
+                    try:
+                        guild = await self.bot.fetch_guild(row["guild_id"])
+                    except Exception:
+                        continue
+                await self._end_if_overdue(guild, row)
+
+            # Also handle giveaways already ended but never announced
+            cursor.execute("SELECT * FROM giveaways WHERE status = 'ended'")
+            ended = cursor.fetchall()
+            for row in ended:
+                if self._has_original_winners(row["giveaway_id"]):
+                    continue
+                guild = self.bot.get_guild(row["guild_id"])
+                if guild is None:
+                    try:
+                        guild = await self.bot.fetch_guild(row["guild_id"])
+                    except Exception:
+                        continue
+                await self._announce_if_missing(guild, row)
+
+            logging.info(
+                "\033[96mGiveaways\033[0m cog synced. Persistent views restored for %d giveaways. Overdue processed: %d.",
+                len(ids),
+                len(overdue),
+            )
+            audit_log(
+                f"Giveaways cog ready. Restored {len(ids)} persistent views. Processed {len(overdue)} overdue giveaways."
+            )
         except Exception as e:
             logging.error(f"Error restoring giveaway views on_ready: {e}")
             audit_log(f"Error restoring giveaway views: {e}")
