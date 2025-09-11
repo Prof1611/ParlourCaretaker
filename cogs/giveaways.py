@@ -474,16 +474,6 @@ class Giveaways(commands.Cog):
             )
             return winners, None
 
-        # Per requirement: never send duplicate messages unless a winner has not been chosen and the end time has passed.
-        # At this point winners have been chosen. Respect the rule and do not send again.
-        # If you ever want to allow a re-announce when the original message was deleted, you could relax this,
-        # but for now we explicitly avoid sending a second public message.
-        if self._has_original_winners(giveaway_id):
-            audit_log(
-                f"Original winners already exist for giveaway {giveaway_id}. Not posting a new winners message."
-            )
-            return winners, None
-
         # This branch will only be reached if somehow winners_drawn was false when called,
         # but _choose_original_winners_once above should always set it and record winners.
         # Still, as a safe fallback, we post once if no winners exist at all.
