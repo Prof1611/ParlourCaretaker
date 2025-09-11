@@ -382,6 +382,13 @@ class Giveaways(commands.Cog):
         )
         return [row["user_id"] for row in cursor.fetchall()]
 
+    def _fetch_winners(self, giveaway_id: int, is_reroll: bool) -> List[sqlite3.Row]:
+        cursor.execute(
+            "SELECT user_id, announced_at FROM giveaway_winners WHERE giveaway_id = ? AND is_reroll = ? ORDER BY id ASC",
+            (giveaway_id, 1 if is_reroll else 0),
+        )
+        return cursor.fetchall()
+
     def _mark_winners_drawn(self, giveaway_id: int) -> None:
         cursor.execute(
             "UPDATE giveaways SET winners_drawn = 1 WHERE giveaway_id = ?",
@@ -1234,7 +1241,13 @@ class Giveaways(commands.Cog):
             )
             return
 
-        await interaction.response.defer(ephemeral=False, thinking=True)
+        try:
+            await interaction.response.defer(ephemeral=False, thinking=True)
+        except discord.NotFound:
+            logging.warning(
+                "Interaction for giveaway_end expired before response could be sent."
+            )
+            return
 
         row = self._fetch_giveaway(giveaway_id)
         if not row or row["guild_id"] != guild.id:
