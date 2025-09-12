@@ -5,7 +5,7 @@ import random
 import sqlite3
 import logging
 import yaml
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import datetime
 import re
@@ -248,6 +248,12 @@ class Giveaways(commands.Cog):
 
         # Register component callbacks for persistent custom_ids
         bot.add_listener(self.on_component_interaction, "on_interaction")
+
+        # Background task to sweep and end overdue giveaways
+        self._sweep_overdue.start()
+
+    def cog_unload(self) -> None:
+        self._sweep_overdue.cancel()
 
     # --------------------------------------------------------
     # Permission Helpers
@@ -673,7 +679,6 @@ class Giveaways(commands.Cog):
                 required_role_id=row["required_role_id"],
                 entry_count=entry_count,
                 status=row["status"],
-                message_url=msg.jump_url,
             )
             view = (
                 GiveawayEntryView(self, giveaway_id)
@@ -686,35 +691,21 @@ class Giveaways(commands.Cog):
 
     async def _end_if_overdue(self, guild: discord.Guild, row: sqlite3.Row) -> bool:
         """
-        If the giveaway has passed its end_time, mark as ended, update the message,
-        and announce winners exactly once. Returns True if it was ended now.
+        If the giveaway has passed its end_time, end it now and announce winners.
+        Returns True if it was ended here.
         """
         if row["status"] != "running" or row["end_time"] > unix_now():
             return False
-        giveaway_id = row["giveaway_id"]
         try:
-            # Mark ended
-            cursor.execute(
-                "UPDATE giveaways SET status = 'ended' WHERE giveaway_id = ?",
-                (giveaway_id,),
-            )
-            conn.commit()
-
-            # Update original message to show ended
-            await self._refresh_giveaway_message(guild, giveaway_id)
-
-            # Announce winners once
-            # Refresh row to see latest idempotency columns
-            row = self._fetch_giveaway(giveaway_id)
-            await self._announce_original_winners_once(
-                guild, row, title="🎉 Giveaway Winners"
-            )
+            await self._end_and_announce_now(guild, row)
             audit_log(
-                f"Auto-ended giveaway {giveaway_id} in guild {row['guild_id']} and handled winners idempotently."
+                f"Auto-ended giveaway {row['giveaway_id']} in guild {row['guild_id']} and handled winners idempotently."
             )
             return True
         except Exception as e:
-            logging.warning(f"Failed to auto-end overdue giveaway {giveaway_id}: {e}")
+            logging.warning(
+                f"Failed to auto-end overdue giveaway {row['giveaway_id']}: {e}"
+            )
             return False
 
     async def _announce_if_missing(
@@ -786,7 +777,6 @@ class Giveaways(commands.Cog):
                 required_role_id=row["required_role_id"],
                 entry_count=self._count_entries(giveaway_id),
                 status="ended",
-                message_url=(msg.jump_url if msg else None),
             )
             if msg:
                 await msg.edit(embed=embed, view=None)
@@ -799,6 +789,33 @@ class Giveaways(commands.Cog):
             guild, fresh, title="🎉 Giveaway Winners"
         )
         return winners
+
+    # --------------------------------------------------------
+    # Background Sweeper
+    # --------------------------------------------------------
+    @tasks.loop(seconds=60)
+    async def _sweep_overdue(self) -> None:
+        try:
+            now = unix_now()
+            cursor.execute(
+                "SELECT * FROM giveaways WHERE status = 'running' AND end_time <= ?",
+                (now,),
+            )
+            rows = cursor.fetchall()
+            for row in rows:
+                guild = self.bot.get_guild(row["guild_id"])
+                if guild is None:
+                    try:
+                        guild = await self.bot.fetch_guild(row["guild_id"])
+                    except Exception:
+                        continue
+                await self._end_if_overdue(guild, row)
+        except Exception as e:
+            logging.warning(f"Giveaways sweep failed: {e}")
+
+    @_sweep_overdue.before_loop
+    async def _sweep_overdue_before_loop(self) -> None:
+        await self.bot.wait_until_ready()
 
     # --------------------------------------------------------
     # Component handling for persistent buttons
@@ -1164,31 +1181,12 @@ class Giveaways(commands.Cog):
             )
             return
 
-        # Update message_id and jump link
+        # Update message_id in DB
         cursor.execute(
             "UPDATE giveaways SET message_id = ? WHERE giveaway_id = ?",
             (message.id, giveaway_id),
         )
         conn.commit()
-
-        # Edit embed to include jump URL
-        try:
-            jump_url = message.jump_url
-            embed_with_jump = self._build_giveaway_embed(
-                guild=guild,
-                prize=prize,
-                description=description,
-                host=actor,
-                end_ts=end_ts,
-                winner_count=winners,
-                required_role_id=required_role.id if required_role else None,
-                entry_count=0,
-                status="running",
-                message_url=jump_url,
-            )
-            await message.edit(embed=embed_with_jump, view=view)
-        except Exception:
-            pass
 
         await interaction.followup.send(
             embed=self._embed(
@@ -1432,7 +1430,6 @@ class Giveaways(commands.Cog):
                 required_role_id=row["required_role_id"],
                 entry_count=self._count_entries(giveaway_id),
                 status="cancelled",
-                message_url=msg.jump_url,
             )
             await msg.edit(embed=embed, view=None)
         except Exception:
