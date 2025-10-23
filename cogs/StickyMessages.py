@@ -6,7 +6,7 @@ import asyncio
 from discord import app_commands
 from discord.ext import commands
 import datetime
-from typing import Optional, Dict, Iterable, Sequence, Union, List
+from typing import Optional, Dict, Iterable, Sequence, Union, List, Set
 
 # ============================================================
 # Discord embed limits and pagination helpers
@@ -458,6 +458,8 @@ class StickyMessages(commands.Cog):
         # Concurrency and debouncing
         self.locks: Dict[int, asyncio.Lock] = {}
         self.debounce_tasks: Dict[int, asyncio.Task] = {}
+        # Channels currently undergoing an intentional sticky removal.
+        self._suppress_repost: Set[int] = set()
         # Use a slightly longer debounce window to reduce churn and duplicates during active chat
         self.debounce_interval = 1.2
 
@@ -804,6 +806,8 @@ class StickyMessages(commands.Cog):
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message):
         # If the bot's sticky was manually deleted, cancel pending debounce and re-post immediately
+        if message.channel.id in self._suppress_repost:
+            return
         if message.author == self.bot.user and message.channel.id in self.stickies:
             sticky = self.stickies[message.channel.id]
             if message.id == sticky["message_id"]:
@@ -863,6 +867,7 @@ class StickyMessages(commands.Cog):
         # Remove under lock to avoid races with debounce
         lock = self.locks.setdefault(channel.id, asyncio.Lock())
         async with lock:
+            self._suppress_repost.add(channel.id)
             try:
                 tracked = self.stickies.get(channel.id)
                 old_id = tracked["message_id"] if tracked else None
@@ -882,6 +887,7 @@ class StickyMessages(commands.Cog):
                 task = self.debounce_tasks.pop(channel.id, None)
                 if task:
                     task.cancel()
+                self._suppress_repost.discard(channel.id)
 
         ok = make_embed(
             "Sticky Removed",
