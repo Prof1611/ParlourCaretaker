@@ -83,7 +83,7 @@ class Scrape(commands.Cog):
                 description=f"An error occurred during scraping:\n`{e}`",
                 color=discord.Color.red(),
             )
-            await interaction.followup.send(embed=error_embed)
+            await self.safe_followup_send(interaction, embed=error_embed)
 
     def run_scraper(self):
         logging.info("Running scraper using Seated API...")
@@ -194,6 +194,37 @@ class Scrape(commands.Cog):
             now = datetime.now(ZoneInfo("Europe/London"))
             return now, now + timedelta(hours=4)
 
+    async def safe_followup_send(self, interaction: discord.Interaction, *, content=None, embed=None, **kwargs):
+        """Safely send a follow-up message, falling back to the channel when the webhook token is invalid."""
+        try:
+            await interaction.followup.send(content=content, embed=embed, **kwargs)
+            return True
+        except discord.HTTPException as e:
+            if e.status == 401 and getattr(e, "code", None) == 50027:
+                logging.warning(
+                    "Failed to send follow-up due to invalid webhook token; attempting channel fallback."
+                )
+                audit_log(
+                    "Follow-up send failed with invalid webhook token; attempting to send message directly to channel."
+                )
+                channel = interaction.channel
+                if channel is not None:
+                    try:
+                        await channel.send(content=content, embed=embed, **kwargs)
+                        audit_log("Fallback message successfully sent to channel after webhook failure.")
+                        return True
+                    except Exception as channel_error:
+                        logging.error(
+                            f"Failed to send fallback message to channel '{channel}': {channel_error}"
+                        )
+                        audit_log(
+                            f"Failed to send fallback message to channel after webhook failure: {channel_error}"
+                        )
+                else:
+                    logging.error("Cannot send fallback message; interaction channel is unavailable.")
+                    audit_log("Fallback message could not be sent because the interaction channel is unavailable.")
+            raise
+
     async def check_forum_threads(self, guild, interaction, new_entries):
         audit_log("Starting check for forum threads for new entries.")
         gigchats_id = self.config["gigchats_id"]
@@ -205,7 +236,7 @@ class Scrape(commands.Cog):
                 description="Threads channel was not found. Please double-check the config.",
                 color=discord.Color.red(),
             )
-            await interaction.followup.send(embed=error_embed)
+            await self.safe_followup_send(interaction, embed=error_embed)
             audit_log(
                 f"{interaction.user.name} (ID: {interaction.user.id}): Failed to update threads because channel with ID {gigchats_id} was not found in guild '{guild.name}' (ID: {guild.id})."
             )
@@ -256,7 +287,7 @@ class Scrape(commands.Cog):
                         description=f"Permission denied when trying to create thread '{thread_title}'.",
                         color=discord.Color.red(),
                     )
-                    await interaction.followup.send(embed=error_embed)
+                    await self.safe_followup_send(interaction, embed=error_embed)
                     audit_log(
                         f"{interaction.user.name} (ID: {interaction.user.id}) encountered permission error creating thread '{thread_title}' in channel #{gigchats_channel.name} (ID: {gigchats_channel.id})."
                     )
@@ -267,7 +298,7 @@ class Scrape(commands.Cog):
                         description=f"Failed to create thread '{thread_title}': `{e}`",
                         color=discord.Color.red(),
                     )
-                    await interaction.followup.send(embed=error_embed)
+                    await self.safe_followup_send(interaction, embed=error_embed)
                     audit_log(
                         f"{interaction.user.name} (ID: {interaction.user.id}) failed to create thread '{thread_title}' in channel #{gigchats_channel.name} (ID: {gigchats_channel.id}) due to HTTP error: {e}"
                     )
@@ -404,7 +435,7 @@ class Scrape(commands.Cog):
                         description=f"Permission denied when trying to create scheduled event '{event_name}'.",
                         color=discord.Color.red(),
                     )
-                    await interaction.followup.send(embed=error_embed)
+                    await self.safe_followup_send(interaction, embed=error_embed)
                     audit_log(
                         f"{interaction.user.name} (ID: {interaction.user.id}) encountered permission error creating scheduled event '{event_name}' in guild '{guild.name}' (ID: {guild.id})."
                     )
@@ -417,7 +448,7 @@ class Scrape(commands.Cog):
                         description=f"Failed to create scheduled event '{event_name}': `{e}`",
                         color=discord.Color.red(),
                     )
-                    await interaction.followup.send(embed=error_embed)
+                    await self.safe_followup_send(interaction, embed=error_embed)
                     audit_log(
                         f"{interaction.user.name} (ID: {interaction.user.id}) failed to create scheduled event '{event_name}' in guild '{guild.name}' (ID: {guild.id}) due to HTTP error: {e}"
                     )
@@ -446,7 +477,7 @@ class Scrape(commands.Cog):
             ),
         )
         logging.debug(f"Sending summary embed with description: {description}")
-        await interaction.followup.send(embed=embed)
+        await self.safe_followup_send(interaction, embed=embed)
         audit_log("Combined summary sent to user with details: " + description)
 
     async def setup_audit(self, interaction):
