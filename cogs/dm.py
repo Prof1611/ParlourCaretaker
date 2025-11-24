@@ -92,6 +92,19 @@ class Dm(commands.Cog):
     )
     @app_commands.describe(user="The user to send the DM to")
     async def dm_command(self, interaction: discord.Interaction, user: discord.User):
+
+        # --------------------------------------------------
+        # 🔐 Role restriction (added as requested)
+        ALLOWED_ROLE_IDS = {1167441098923319346, 1151863417301368863}
+        user_role_ids = {role.id for role in interaction.user.roles}
+
+        if not ALLOWED_ROLE_IDS.intersection(user_role_ids):
+            return await interaction.response.send_message(
+                "❌ You do not have permission to use this command.",
+                ephemeral=True
+            )
+        # --------------------------------------------------
+
         modal = DMModal(self.bot, user, interaction.user)
         await interaction.response.send_modal(modal)
         audit_log(
