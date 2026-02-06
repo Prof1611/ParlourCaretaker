@@ -8,6 +8,8 @@ import unicodedata
 import asyncio
 
 DATABASE_PATH = "database.db"
+HISTORY_THROTTLE_BATCH = 200
+HISTORY_THROTTLE_SLEEP = 1.0
 
 
 def audit_log(message: str):
@@ -202,6 +204,9 @@ class SecondBestTracker(commands.Cog):
                 async for msg in channel.history(limit=None, oldest_first=True):
                     message_count += 1
                     total_messages += 1
+
+                    if message_count % HISTORY_THROTTLE_BATCH == 0:
+                        await asyncio.sleep(HISTORY_THROTTLE_SLEEP)
 
                     if msg.author.bot:
                         continue
