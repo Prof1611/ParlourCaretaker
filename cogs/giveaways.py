@@ -1,14 +1,17 @@
 from __future__ import annotations
+
 from typing import Optional, List, Tuple, Sequence
-import discord
-import random
-import sqlite3
-import logging
-import yaml
-from discord.ext import commands, tasks
-from discord import app_commands
+
 import datetime
+import logging
+import random
 import re
+import sqlite3
+
+import discord
+import yaml
+from discord import app_commands
+from discord.ext import commands, tasks
 
 # ============================================================
 # Database setup
@@ -120,11 +123,14 @@ def _ensure_schema() -> None:
 _ensure_schema()
 
 
-def audit_log(message: str):
+def audit_log(message: str) -> None:
     """Append a timestamped message to the audit log file."""
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open("audit.log", "a", encoding="utf-8") as f:
-        f.write(f"[{timestamp}] {message}\n")
+    try:
+        with open("audit.log", "a", encoding="utf-8") as f:
+            f.write(f"[{timestamp}] {message}\n")
+    except Exception as e:
+        logging.error(f"Failed to write to audit.log: {e}")
 
 
 def unix_now() -> int:
@@ -151,7 +157,7 @@ def parse_duration_to_seconds(s: str) -> Optional[int]:
     return total if total > 0 else None
 
 
-def humanize_remaining(seconds: int) -> str:
+def humanise_remaining(seconds: int) -> str:
     if seconds <= 0:
         return "0s"
     parts: List[str] = []
@@ -174,8 +180,7 @@ def humanize_remaining(seconds: int) -> str:
 # ============================================================
 class GiveawayEntryView(discord.ui.View):
     def __init__(self, cog: "Giveaways", giveaway_id: int):
-        # Persistent view so users can enter even after a bot restart
-        super().__init__(timeout=None)
+        super().__init__(timeout=None)  # persistent
         self.cog = cog
         self.giveaway_id = giveaway_id
 
@@ -253,7 +258,14 @@ class Giveaways(commands.Cog):
         self._sweep_overdue.start()
 
     def cog_unload(self) -> None:
-        self._sweep_overdue.cancel()
+        try:
+            self._sweep_overdue.cancel()
+        except Exception:
+            pass
+        try:
+            self.bot.remove_listener(self.on_component_interaction, "on_interaction")
+        except Exception:
+            pass
 
     # --------------------------------------------------------
     # Permission Helpers
@@ -327,7 +339,6 @@ class Giveaways(commands.Cog):
         return cursor.fetchone()
 
     def _active_giveaways_for_guild(self, guild_id: int) -> List[sqlite3.Row]:
-        # Only status running and not past end time
         now = unix_now()
         cursor.execute(
             "SELECT * FROM giveaways WHERE guild_id = ? AND status = 'running' AND end_time > ? ORDER BY end_time ASC",
@@ -335,9 +346,16 @@ class Giveaways(commands.Cog):
         )
         return cursor.fetchall()
 
-    def _count_entries(self, giveaway_id: int) -> int:
+    def _count_unique_entrants(self, giveaway_id: int) -> int:
         cursor.execute(
             "SELECT COUNT(*) FROM giveaway_entries WHERE giveaway_id = ?",
+            (giveaway_id,),
+        )
+        return int(cursor.fetchone()[0])
+
+    def _count_total_entries(self, giveaway_id: int) -> int:
+        cursor.execute(
+            "SELECT COALESCE(SUM(entries), 0) FROM giveaway_entries WHERE giveaway_id = ?",
             (giveaway_id,),
         )
         return int(cursor.fetchone()[0])
@@ -413,6 +431,14 @@ class Giveaways(commands.Cog):
         )
         conn.commit()
 
+    def _set_status_and_end_time(self, giveaway_id: int, status: str) -> None:
+        # Keep end_time accurate for "Ended" display if the giveaway is ended early or cancelled.
+        cursor.execute(
+            "UPDATE giveaways SET status = ?, end_time = ? WHERE giveaway_id = ?",
+            (status, unix_now(), giveaway_id),
+        )
+        conn.commit()
+
     # --------------------------------------------------------
     # Idempotent Winner Flow
     # --------------------------------------------------------
@@ -421,29 +447,31 @@ class Giveaways(commands.Cog):
     ) -> List[int]:
         """
         Choose original winners exactly once. If already chosen, return the existing list.
-        If not, select from entrants, record to DB, and mark winners_drawn.
+        If not, select from entrants with weighting, record to DB, and mark winners_drawn.
         """
-        # If any original winners exist, return them
         if self._has_original_winners(giveaway_id):
             return self._existing_original_winner_ids(giveaway_id)
 
         entrants_rows = self._get_entrants(giveaway_id)
-        entrants: List[int] = []
-        for r in entrants_rows:
-            # Weighting by entries value
-            entrants.extend([r["user_id"]] * int(max(1, r["entries"])))
 
-        random.shuffle(entrants)
+        # Build "ticket bucket" with weighting (each entry is a ticket).
+        tickets: List[int] = []
+        for r in entrants_rows:
+            uid = int(r["user_id"])
+            count = int(max(1, int(r["entries"])))
+            tickets.extend([uid] * count)
 
         winners: List[int] = []
-        if entrants and desired_count > 0:
-            # sample without replacement by converting to set first to avoid same user winning twice,
-            # while still respecting weighting during shuffle
-            unique_entrants = list(dict.fromkeys(entrants))  # preserve order
-            pick = min(desired_count, len(unique_entrants))
-            winners = random.sample(unique_entrants, pick)
+        desired = max(0, int(desired_count))
+        if tickets and desired > 0:
+            # Weighted without replacement:
+            # pick from tickets; when a user wins, remove all of their tickets.
+            while tickets and len(winners) < desired:
+                pick_uid = random.choice(tickets)
+                if pick_uid not in winners:
+                    winners.append(pick_uid)
+                tickets = [u for u in tickets if u != pick_uid]
 
-        # Record winners (may be empty) and mark drawn
         self._record_winners(
             giveaway_id=giveaway_id, winners=winners, is_reroll=False, message_id=None
         )
@@ -470,19 +498,14 @@ class Giveaways(commands.Cog):
         winner_count = int(row["winner_count"])
         host_id = row["host_id"]
 
-        # Ensure winners are chosen exactly once
         winners = await self._choose_original_winners_once(giveaway_id, winner_count)
 
-        # If a winners message has already been posted, do not send a duplicate
         if row["winners_message_id"]:
             audit_log(
                 f"Skip duplicate announce for giveaway {giveaway_id}. Existing message id {row['winners_message_id']}."
             )
             return winners, None
 
-        # This branch will only be reached if somehow winners_drawn was false when called,
-        # but _choose_original_winners_once above should always set it and record winners.
-        # Still, as a safe fallback, we post once if no winners exist at all.
         try:
             channel = guild.get_channel(channel_id) or await guild.fetch_channel(
                 channel_id
@@ -491,7 +514,6 @@ class Giveaways(commands.Cog):
             msg = await channel.send(embed=embed)
             self._save_winners_announcement_message(giveaway_id, msg.id)
 
-            # DM winners
             for uid in winners:
                 try:
                     user = guild.get_member(uid) or await guild.fetch_member(uid)
@@ -501,7 +523,6 @@ class Giveaways(commands.Cog):
                 except Exception:
                     pass
 
-            # DM host
             if host_id:
                 try:
                     host_member = guild.get_member(host_id) or await guild.fetch_member(
@@ -537,12 +558,21 @@ class Giveaways(commands.Cog):
         prize = row["prize"]
         host_id = row["host_id"]
 
-        entrants = [r["user_id"] for r in self._get_entrants(giveaway_id)]
-        random.shuffle(entrants)
+        entrants_rows = self._get_entrants(giveaway_id)
+        tickets: List[int] = []
+        for r in entrants_rows:
+            uid = int(r["user_id"])
+            count = int(max(1, int(r["entries"])))
+            tickets.extend([uid] * count)
+
         winners: List[int] = []
-        if entrants and winners_to_draw > 0:
-            pick = min(winners_to_draw, len(entrants))
-            winners = random.sample(entrants, pick)
+        desired = max(0, int(winners_to_draw))
+        if tickets and desired > 0:
+            while tickets and len(winners) < desired:
+                pick_uid = random.choice(tickets)
+                if pick_uid not in winners:
+                    winners.append(pick_uid)
+                tickets = [u for u in tickets if u != pick_uid]
 
         msg: Optional[discord.Message] = None
         try:
@@ -554,7 +584,6 @@ class Giveaways(commands.Cog):
         except Exception:
             msg = None
 
-        # Record reroll winners
         self._record_winners(
             giveaway_id=giveaway_id,
             winners=winners,
@@ -565,7 +594,6 @@ class Giveaways(commands.Cog):
             f"Giveaway {giveaway_id} reroll winners: {', '.join(map(str, winners)) if winners else 'no winners'}"
         )
 
-        # DM winners
         for uid in winners:
             try:
                 user = guild.get_member(uid) or await guild.fetch_member(uid)
@@ -573,7 +601,6 @@ class Giveaways(commands.Cog):
             except Exception:
                 pass
 
-        # DM host
         if host_id:
             try:
                 host_member = guild.get_member(host_id) or await guild.fetch_member(
@@ -614,9 +641,12 @@ class Giveaways(commands.Cog):
                 discord.Color.red() if status == "cancelled" else discord.Color.gold()
             )
         )
+
+        safe_desc = (description or "").strip()
+
         embed = discord.Embed(
             title="🎁 Giveaway",
-            description=description or "\u200b",
+            description=safe_desc if safe_desc else "",
             color=colour,
         )
         embed.add_field(name="Prize", value=prize, inline=False)
@@ -624,18 +654,25 @@ class Giveaways(commands.Cog):
         if status == "running":
             embed.add_field(name="Ends", value=f"{pretty_time}", inline=True)
             embed.add_field(
-                name="Time Remaining", value=humanize_remaining(remaining), inline=True
+                name="Time Remaining", value=humanise_remaining(remaining), inline=True
             )
         else:
             embed.add_field(name="Ended", value=f"{pretty_time}", inline=True)
+
         embed.add_field(name="Entries", value=str(entry_count), inline=True)
+
         if required_role_id:
             embed.add_field(
                 name="Requirement", value=f"<@&{required_role_id}>", inline=True
             )
         if host:
             embed.set_footer(text=f"Hosted by {host.display_name}")
-            embed.set_author(name=host.display_name, icon_url=host.display_avatar.url)
+            try:
+                embed.set_author(
+                    name=host.display_name, icon_url=host.display_avatar.url
+                )
+            except Exception:
+                embed.set_author(name=host.display_name)
         if message_url:
             embed.add_field(
                 name="Jump", value=f"[Go to message]({message_url})", inline=False
@@ -652,13 +689,17 @@ class Giveaways(commands.Cog):
         if not row:
             return
         try:
-            entry_count = self._count_entries(giveaway_id)
+            entry_count = self._count_total_entries(giveaway_id)
             channel = guild.get_channel(row["channel_id"]) or await guild.fetch_channel(
                 row["channel_id"]
             )
 
-            msg = None
-            if message_hint and message_hint.id == row["message_id"]:
+            msg: Optional[discord.Message]
+            if (
+                message_hint
+                and row["message_id"]
+                and message_hint.id == row["message_id"]
+            ):
                 msg = message_hint
             else:
                 try:
@@ -720,9 +761,7 @@ class Giveaways(commands.Cog):
         if self._has_original_winners(row["giveaway_id"]):
             return False
         try:
-            # Ensure the original message reflects ended
             await self._refresh_giveaway_message(guild, row["giveaway_id"])
-            # Draw and announce once
             await self._announce_original_winners_once(
                 guild=guild,
                 row=row,
@@ -746,16 +785,13 @@ class Giveaways(commands.Cog):
         and announce winners exactly once. Returns list of original winners.
         """
         giveaway_id = row["giveaway_id"]
+
         try:
-            cursor.execute(
-                "UPDATE giveaways SET status = 'ended' WHERE giveaway_id = ?",
-                (giveaway_id,),
-            )
-            conn.commit()
+            self._set_status_and_end_time(giveaway_id, "ended")
         except Exception:
             pass
 
-        # Update original message embed to show ended (using 'now' as end_ts for display)
+        # Update original message to show ended (and remove buttons)
         try:
             channel = guild.get_channel(row["channel_id"]) or await guild.fetch_channel(
                 row["channel_id"]
@@ -767,24 +803,26 @@ class Giveaways(commands.Cog):
                 except Exception:
                     msg = None
 
-            embed = self._build_giveaway_embed(
-                guild=guild,
-                prize=row["prize"],
-                description=row["description"],
-                host=guild.get_member(row["host_id"]),
-                end_ts=unix_now(),
-                winner_count=int(row["winner_count"]),
-                required_role_id=row["required_role_id"],
-                entry_count=self._count_entries(giveaway_id),
-                status="ended",
-            )
-            if msg:
+            ended_row = self._fetch_giveaway(giveaway_id)
+            if ended_row and msg:
+                embed = self._build_giveaway_embed(
+                    guild=guild,
+                    prize=ended_row["prize"],
+                    description=ended_row["description"],
+                    host=guild.get_member(ended_row["host_id"]),
+                    end_ts=ended_row["end_time"],
+                    winner_count=int(ended_row["winner_count"]),
+                    required_role_id=ended_row["required_role_id"],
+                    entry_count=self._count_total_entries(giveaway_id),
+                    status="ended",
+                )
                 await msg.edit(embed=embed, view=None)
         except Exception:
             pass
 
-        # Refresh row with latest idempotency columns and announce once
         fresh = self._fetch_giveaway(giveaway_id)
+        if not fresh:
+            return []
         winners, _ = await self._announce_original_winners_once(
             guild, fresh, title="🎉 Giveaway Winners"
         )
@@ -856,7 +894,8 @@ class Giveaways(commands.Cog):
             return
 
         guild = interaction.guild
-        assert guild is not None
+        if guild is None:
+            return
 
         # Auto-end if time has passed (and handle winners idempotently)
         if await self._end_if_overdue(guild, row):
@@ -892,6 +931,8 @@ class Giveaways(commands.Cog):
             if isinstance(interaction.user, discord.Member)
             else guild.get_member(interaction.user.id)
         )
+        if not isinstance(member, discord.Member):
+            return
 
         # Blacklist check
         if self._user_is_blacklisted(guild.id, member.id):
@@ -909,7 +950,7 @@ class Giveaways(commands.Cog):
             return
 
         required_role_id = row["required_role_id"]
-        max_entries = row["max_entries_per_user"]
+        max_entries = int(row["max_entries_per_user"])
 
         # Role requirement
         if required_role_id and not any(r.id == required_role_id for r in member.roles):
@@ -926,7 +967,7 @@ class Giveaways(commands.Cog):
                 pass
             return
 
-        giveaway_id_val = row["giveaway_id"]
+        giveaway_id_val = int(row["giveaway_id"])
 
         # Enter
         if action == "giveaway_enter":
@@ -960,7 +1001,7 @@ class Giveaways(commands.Cog):
                     (giveaway_id_val, guild.id, member.id, 1, unix_now()),
                 )
 
-            # Update giveaway entry count
+            # Keep legacy giveaways.entry_count in sync with total entries
             cursor.execute(
                 "UPDATE giveaways SET entry_count = entry_count + 1 WHERE giveaway_id = ?",
                 (giveaway_id_val,),
@@ -978,6 +1019,7 @@ class Giveaways(commands.Cog):
                 )
             except Exception:
                 pass
+
             audit_log(
                 f"{member} entered giveaway {giveaway_id_val} in guild {guild.id}."
             )
@@ -1018,7 +1060,6 @@ class Giveaways(commands.Cog):
                     (giveaway_id_val, member.id),
                 )
 
-            # Decrement global entry counter, not below zero
             cursor.execute(
                 "UPDATE giveaways SET entry_count = CASE WHEN entry_count > 0 THEN entry_count - 1 ELSE 0 END WHERE giveaway_id = ?",
                 (giveaway_id_val,),
@@ -1036,6 +1077,7 @@ class Giveaways(commands.Cog):
                 )
             except Exception:
                 pass
+
             audit_log(f"{member} left giveaway {giveaway_id_val} in guild {guild.id}.")
             await self._refresh_giveaway_message(
                 guild, giveaway_id_val, interaction.message
@@ -1091,7 +1133,6 @@ class Giveaways(commands.Cog):
 
         await interaction.response.defer(ephemeral=False, thinking=True)
 
-        # Apply defaults
         winners = (
             winners if winners and winners > 0 else int(self.defaults["winner_count"])
         )
@@ -1100,7 +1141,7 @@ class Giveaways(commands.Cog):
             if max_entries_per_user and max_entries_per_user > 0
             else int(self.defaults["max_entries_per_user"])
         )
-        duration_str = duration or self.defaults["duration"]
+        duration_str = duration or str(self.defaults["duration"])
         seconds = parse_duration_to_seconds(duration_str)
         if seconds is None:
             await interaction.followup.send(
@@ -1126,7 +1167,6 @@ class Giveaways(commands.Cog):
             )
             return
 
-        # Insert into DB
         cursor.execute(
             """
             INSERT INTO giveaways
@@ -1137,34 +1177,32 @@ class Giveaways(commands.Cog):
                 guild.id,
                 target_channel.id,
                 prize,
-                description or None,
+                (description.strip() if description and description.strip() else None),
                 actor.id,
                 unix_now(),
                 end_ts,
-                winners,
-                required_role.id if required_role else None,
-                max_entries,
+                int(winners),
+                (required_role.id if required_role else None),
+                int(max_entries),
             ),
         )
         conn.commit()
         giveaway_id = cursor.lastrowid
 
-        # Build embed and view
         embed = self._build_giveaway_embed(
             guild=guild,
             prize=prize,
             description=description,
             host=actor,
             end_ts=end_ts,
-            winner_count=winners,
-            required_role_id=required_role.id if required_role else None,
+            winner_count=int(winners),
+            required_role_id=(required_role.id if required_role else None),
             entry_count=0,
             status="running",
         )
         view = GiveawayEntryView(self, giveaway_id)
 
         try:
-            # Role ping (plaintext) allowed alongside embed
             content_ping = f"<@&{self.ping_role_id}>" if self.ping_role_id else None
             message = await target_channel.send(
                 content=content_ping, embed=embed, view=view
@@ -1181,7 +1219,6 @@ class Giveaways(commands.Cog):
             )
             return
 
-        # Update message_id in DB
         cursor.execute(
             "UPDATE giveaways SET message_id = ? WHERE giveaway_id = ?",
             (message.id, giveaway_id),
@@ -1251,7 +1288,9 @@ class Giveaways(commands.Cog):
         if row["status"] != "running":
             await interaction.followup.send(
                 embed=self._embed(
-                    "Not running", "That giveaway is not running.", discord.Color.red()
+                    "Not running",
+                    "That giveaway is not running.",
+                    discord.Color.red(),
                 ),
                 ephemeral=True,
             )
@@ -1320,7 +1359,6 @@ class Giveaways(commands.Cog):
             )
             return
 
-        # Strict rule: can only reroll if the giveaway has ended
         if row["status"] != "ended":
             await interaction.followup.send(
                 embed=self._embed(
@@ -1406,32 +1444,31 @@ class Giveaways(commands.Cog):
             )
             return
 
-        cursor.execute(
-            "UPDATE giveaways SET status = 'cancelled' WHERE giveaway_id = ?",
-            (giveaway_id,),
-        )
-        conn.commit()
+        try:
+            self._set_status_and_end_time(giveaway_id, "cancelled")
+        except Exception:
+            pass
 
         # Update original message
-        channel_id = row["channel_id"]
-        message_id = row["message_id"]
         try:
-            channel = guild.get_channel(channel_id) or await guild.fetch_channel(
-                channel_id
-            )
-            msg = await channel.fetch_message(message_id)
-            embed = self._build_giveaway_embed(
-                guild=guild,
-                prize=row["prize"],
-                description=row["description"],
-                host=guild.get_member(row["host_id"]),
-                end_ts=unix_now(),
-                winner_count=int(row["winner_count"]),
-                required_role_id=row["required_role_id"],
-                entry_count=self._count_entries(giveaway_id),
-                status="cancelled",
-            )
-            await msg.edit(embed=embed, view=None)
+            fresh = self._fetch_giveaway(giveaway_id)
+            if fresh:
+                channel = guild.get_channel(
+                    fresh["channel_id"]
+                ) or await guild.fetch_channel(fresh["channel_id"])
+                msg = await channel.fetch_message(fresh["message_id"])
+                embed = self._build_giveaway_embed(
+                    guild=guild,
+                    prize=fresh["prize"],
+                    description=fresh["description"],
+                    host=guild.get_member(fresh["host_id"]),
+                    end_ts=fresh["end_time"],
+                    winner_count=int(fresh["winner_count"]),
+                    required_role_id=fresh["required_role_id"],
+                    entry_count=self._count_total_entries(giveaway_id),
+                    status="cancelled",
+                )
+                await msg.edit(embed=embed, view=None)
         except Exception:
             pass
 
@@ -1461,7 +1498,7 @@ class Giveaways(commands.Cog):
             )
             return
 
-        # Optional: mark any overdue ones as ended so they stop showing up anywhere
+        # Optional: mark any overdue ones as ended so they stop showing up
         try:
             cursor.execute(
                 "SELECT * FROM giveaways WHERE guild_id = ? AND status = 'running' AND end_time <= ?",
@@ -1489,7 +1526,7 @@ class Giveaways(commands.Cog):
             channel_id = row["channel_id"]
             prize = row["prize"]
             end_ts = row["end_time"]
-            entries = row["entry_count"]
+            entries = int(row["entry_count"])
             lines.append(
                 f"• ID `{gid}` in <#{channel_id}> - **{prize}** - ends <t:{end_ts}:R> - entries: {entries}"
             )
@@ -1541,7 +1578,7 @@ class Giveaways(commands.Cog):
         status = row["status"]
         required_role_id = row["required_role_id"]
         max_entries = int(row["max_entries_per_user"])
-        entry_count = self._count_entries(giveaway_id)
+        entry_count = self._count_total_entries(giveaway_id)
         winners_drawn = int(row["winners_drawn"])
         winners_msg_id = row["winners_message_id"]
         winners_announced_at = row["winners_announced_at"]
@@ -1572,8 +1609,12 @@ class Giveaways(commands.Cog):
             name="Max Entries Per User", value=str(max_entries), inline=True
         )
         embed.add_field(name="ID", value=str(giveaway_id), inline=True)
+        embed.add_field(
+            name="Unique Entrants",
+            value=str(self._count_unique_entrants(giveaway_id)),
+            inline=True,
+        )
 
-        # Winner details (original + rerolls)
         orig_winners = self._fetch_winners(giveaway_id, is_reroll=False)
         reroll_winners = self._fetch_winners(giveaway_id, is_reroll=True)
 
@@ -1588,18 +1629,13 @@ class Giveaways(commands.Cog):
             return "\n".join(parts)
 
         embed.add_field(
-            name="Original Winners",
-            value=fmt_winners(orig_winners),
-            inline=False,
+            name="Original Winners", value=fmt_winners(orig_winners), inline=False
         )
         if reroll_winners:
             embed.add_field(
-                name="Reroll Winners",
-                value=fmt_winners(reroll_winners),
-                inline=False,
+                name="Reroll Winners", value=fmt_winners(reroll_winners), inline=False
             )
 
-        # Idempotency state snapshot
         drawn_state = "Yes" if winners_drawn else "No"
         announced_state = (
             f"Yes (message id {winners_msg_id}, <t:{winners_announced_at}:R>)"
@@ -1673,13 +1709,12 @@ class Giveaways(commands.Cog):
             else:
                 lines.append(mention)
 
-        # Chunk to respect Discord embed limits
         chunks: List[List[str]] = []
         current: List[str] = []
         current_len = 0
         for line in lines:
             add_len = len(line) + 1
-            if current_len + add_len > 3800:  # safe margin under 4096 description cap
+            if current_len + add_len > 3800:
                 chunks.append(current)
                 current = [line]
                 current_len = add_len
@@ -1689,7 +1724,6 @@ class Giveaways(commands.Cog):
         if current:
             chunks.append(current)
 
-        # Send first as reply, rest follow-ups
         first_embed = discord.Embed(
             title="Giveaway Entrants",
             description=f"{header}\n\n" + "\n".join(chunks[0]),
@@ -1714,13 +1748,11 @@ class Giveaways(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self) -> None:
         try:
-            # Re-register persistent views for all running giveaways so buttons continue to work after restarts
             cursor.execute("SELECT giveaway_id FROM giveaways WHERE status = 'running'")
             ids = [row["giveaway_id"] for row in cursor.fetchall()]
             for gid in ids:
                 self.bot.add_view(GiveawayEntryView(self, gid))
 
-            # Sweep any overdue giveaways and auto-end + announce once
             now = unix_now()
             cursor.execute(
                 "SELECT * FROM giveaways WHERE status = 'running' AND end_time <= ?",
@@ -1736,7 +1768,6 @@ class Giveaways(commands.Cog):
                         continue
                 await self._end_if_overdue(guild, row)
 
-            # Handle giveaways already ended but never announced
             cursor.execute("SELECT * FROM giveaways WHERE status = 'ended'")
             ended = cursor.fetchall()
             for row in ended:
