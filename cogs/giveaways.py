@@ -117,6 +117,9 @@ def _ensure_schema() -> None:
     cursor.execute(
         "UPDATE giveaways SET winners_announced_at = NULL WHERE winners_announced_at IS NOT NULL AND CAST(winners_announced_at AS TEXT) = ''"
     )
+    cursor.execute(
+        "UPDATE giveaways SET message_id = NULL WHERE message_id IS NOT NULL AND CAST(message_id AS TEXT) = ''"
+    )
     conn.commit()
 
 
@@ -694,18 +697,33 @@ class Giveaways(commands.Cog):
                 row["channel_id"]
             )
 
+            message_id_val: Optional[int]
+            try:
+                message_id_val = (
+                    int(row["message_id"])
+                    if row["message_id"] is not None
+                    and str(row["message_id"]).strip() != ""
+                    else None
+                )
+            except (TypeError, ValueError):
+                message_id_val = None
+
             msg: Optional[discord.Message]
-            if (
-                message_hint
-                and row["message_id"]
-                and message_hint.id == row["message_id"]
+            if message_hint and (
+                message_id_val is None
+                or (
+                    message_hint.id == message_id_val
+                    and message_hint.channel.id == row["channel_id"]
+                )
             ):
                 msg = message_hint
-            else:
+            elif message_id_val is not None:
                 try:
-                    msg = await channel.fetch_message(row["message_id"])
+                    msg = await channel.fetch_message(message_id_val)
                 except Exception:
                     msg = None
+            else:
+                msg = None
 
             if msg is None:
                 return
