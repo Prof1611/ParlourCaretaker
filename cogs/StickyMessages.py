@@ -691,18 +691,10 @@ class StickyMessages(commands.Cog):
 
         lock = self.locks.setdefault(channel.id, asyncio.Lock())
         async with lock:
-            # If not forced and the latest message is already our sticky, do nothing
-            try:
-                async for last in channel.history(limit=1):
-                    if self._is_message_sticky(last) and (
-                        sticky.get("message_id") is None
-                        or last.id == sticky.get("message_id")
-                    ):
-                        if not force_update:
-                            return
-                        break
-            except Exception:
-                pass
+            # Skip no-op updates when callers do not force a repost and there is no tracked sticky.
+            # This avoids unnecessary API calls in message-heavy channels.
+            if not force_update and not sticky.get("message_id"):
+                return
 
             # Purge all old stickies except the one we track if it happens to be latest
             await self._purge_old_stickies(channel, skip_id=sticky.get("message_id"))
