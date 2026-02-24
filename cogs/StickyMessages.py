@@ -458,10 +458,16 @@ class StickyMessages(commands.Cog):
         # Concurrency and debouncing
         self.locks: Dict[int, asyncio.Lock] = {}
         self.debounce_tasks: Dict[int, asyncio.Task] = {}
+        self.last_repost_times: Dict[int, float] = {}
+        self.last_cleanup_times: Dict[int, float] = {}
         # Channels currently undergoing an intentional sticky removal.
         self._suppress_repost: Set[int] = set()
         # Use a slightly longer debounce window to reduce churn and duplicates during active chat
         self.debounce_interval = 1.2
+        # Hard cap for how often a sticky is reposted in busy channels.
+        self.repost_cooldown = 20.0
+        # How often to run a lightweight duplicate cleanup during normal repost cycles.
+        self.cleanup_interval = 600.0
 
     def cog_unload(self):
         try:
@@ -691,18 +697,32 @@ class StickyMessages(commands.Cog):
 
         lock = self.locks.setdefault(channel.id, asyncio.Lock())
         async with lock:
+            loop_time = asyncio.get_running_loop().time()
+
             # Skip no-op updates when callers do not force a repost and there is no tracked sticky.
             # This avoids unnecessary API calls in message-heavy channels.
             if not force_update and not sticky.get("message_id"):
                 return
 
-            # Purge all old stickies except the one we track if it happens to be latest
-            await self._purge_old_stickies(channel, skip_id=sticky.get("message_id"))
+            if not force_update:
+                last_repost = self.last_repost_times.get(channel.id, 0.0)
+                if (loop_time - last_repost) < self.repost_cooldown:
+                    return
+
+            tracked_message_id = (self.stickies.get(channel.id) or sticky).get("message_id")
+
+            # If the tracked sticky is already the newest message, there is nothing to do.
+            try:
+                latest = [m async for m in channel.history(limit=1)]
+                if latest and tracked_message_id and latest[0].id == tracked_message_id:
+                    return
+            except Exception as e:
+                logging.debug(f"Failed latest-message check in #{channel.name}: {e}")
 
             # If we still have the tracked sticky in the channel but it is not last, delete it so we can re-send
-            if sticky.get("message_id"):
+            if tracked_message_id:
                 try:
-                    old_message = await channel.fetch_message(sticky["message_id"])
+                    old_message = await channel.fetch_message(tracked_message_id)
                     try:
                         await old_message.delete()
                     except Exception:
@@ -731,11 +751,13 @@ class StickyMessages(commands.Cog):
             self.update_sticky_in_db(
                 channel.id, sticky["content"], new_msg.id, fmt, colour_value
             )
+            self.last_repost_times[channel.id] = loop_time
 
-            # Final small sweep
-            await self._manual_sweep_for_stickies(
-                channel, skip_ids=[new_msg.id], limit=25
-            )
+            # Periodic lightweight cleanup to remove stale duplicates without high API churn.
+            last_cleanup = self.last_cleanup_times.get(channel.id, 0.0)
+            if force_update or (loop_time - last_cleanup) >= self.cleanup_interval:
+                await self._manual_sweep_for_stickies(channel, skip_ids=[new_msg.id], limit=100)
+                self.last_cleanup_times[channel.id] = loop_time
 
     # -----------------------
     # Events
